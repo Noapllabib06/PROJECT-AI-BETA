@@ -1,140 +1,364 @@
 <!DOCTYPE html>
-<html lang="id">
+<html lang="id" class="h-full">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>JARVIS - AI Assistant</title>
+    <title>Jarvis - AI Assistant</title>
+
+    <!-- Tailwind CDN -->
+    <script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+
+    <!-- Google Fonts + Material Symbols -->
+    <link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&display=swap" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+
+    <!-- Prism (syntax highlighting for Code Preview) -->
+    <link rel="stylesheet" href="lib/prism-tomorrow.css">
+
+    <!-- Tailwind Config -->
+    <script>
+        tailwind.config = {
+            darkMode: "class",
+            theme: {
+                extend: {
+                    colors: {
+                        "surface-container-lowest": "#ffffff",
+                        "tertiary-container": "#00a9f0",
+                        "on-secondary": "#ffffff",
+                        "on-tertiary": "#ffffff",
+                        "inverse-surface": "#2e3132",
+                        "secondary-fixed": "#e4e2e1",
+                        "on-primary-fixed": "#311300",
+                        "surface-variant": "#e1e3e4",
+                        "primary-fixed": "#ffdcc7",
+                        "outline-variant": "#ddc1b1",
+                        "on-primary": "#ffffff",
+                        "secondary-container": "#e4e2e1",
+                        "secondary-fixed-dim": "#c8c6c6",
+                        "on-tertiary-container": "#003a56",
+                        "surface-container-high": "#e7e8e9",
+                        "action-orange-vibrant": "#F38020",
+                        "inverse-primary": "#ffb787",
+                        "on-error-container": "#93000a",
+                        "primary-container": "#f38020",
+                        "on-background": "#191c1d",
+                        "on-primary-fixed-variant": "#723600",
+                        "on-secondary-container": "#656464",
+                        "surface-container": "#edeeef",
+                        "tertiary": "#006591",
+                        "secondary": "#5f5e5e",
+                        "tertiary-fixed": "#c9e6ff",
+                        "inverse-on-surface": "#f0f1f2",
+                        "surface-gray": "#F4F4F7",
+                        "surface-container-low": "#f3f4f5",
+                        "tertiary-fixed-dim": "#89ceff",
+                        "error-container": "#ffdad6",
+                        "primary": "#964900",
+                        "outline": "#8a7264",
+                        "surface": "#f8f9fa",
+                        "surface-bright": "#f8f9fa",
+                        "on-surface-variant": "#564336",
+                        "on-secondary-fixed-variant": "#474747",
+                        "primary-fixed-dim": "#ffb787",
+                        "on-error": "#ffffff",
+                        "surface-container-highest": "#e1e3e4",
+                        "border-subtle": "#E5E7EB",
+                        "on-tertiary-fixed-variant": "#004c6e",
+                        "on-surface": "#191c1d",
+                        "on-tertiary-fixed": "#001e2f",
+                        "background": "#f8f9fa",
+                        "surface-dim": "#d9dadb",
+                        "surface-tint": "#964900",
+                        "on-primary-container": "#592900",
+                        "text-secondary": "#6B7280",
+                        "error": "#ba1a1a",
+                        "on-secondary-fixed": "#1b1c1c",
+                        "text-primary": "#1A1A1A"
+                    },
+                    borderRadius: {
+                        DEFAULT: "0.25rem",
+                        lg: "0.5rem",
+                        xl: "0.75rem",
+                        full: "9999px"
+                    },
+                    fontFamily: {
+                        "display-lg": ["Inter"],
+                        "body-lg": ["Inter"],
+                        "code-snippet": ["JetBrains Mono"],
+                        "headline-lg-mobile": ["Inter"],
+                        "body-md": ["Inter"],
+                        "headline-lg": ["Inter"],
+                        "label-sm": ["JetBrains Mono"],
+                        "title-md": ["Inter"]
+                    },
+                    fontSize: {
+                        "display-lg": ["48px", { lineHeight: "56px", letterSpacing: "-0.02em", fontWeight: "600" }],
+                        "body-lg": ["18px", { lineHeight: "28px", fontWeight: "400" }],
+                        "code-snippet": ["14px", { lineHeight: "20px", fontWeight: "400" }],
+                        "headline-lg-mobile": ["24px", { lineHeight: "32px", fontWeight: "600" }],
+                        "body-md": ["16px", { lineHeight: "24px", fontWeight: "400" }],
+                        "headline-lg": ["32px", { lineHeight: "40px", letterSpacing: "-0.01em", fontWeight: "600" }],
+                        "label-sm": ["13px", { lineHeight: "16px", letterSpacing: "0.02em", fontWeight: "500" }],
+                        "title-md": ["20px", { lineHeight: "28px", fontWeight: "500" }]
+                    }
+                }
+            }
+        };
+    </script>
+
+    <!-- Custom Styles (animations, Electron drag, scrollbar, etc.) -->
     <link rel="stylesheet" href="style.css">
 </head>
-<body>
-    <!-- Title Bar -->
-    <header class="title-bar" id="titleBar">
-        <div class="title-bar-drag">
-            <div class="logo-mark">J</div>
-            <span class="logo-text">Jarvis</span>
+<body class="bg-surface h-full flex overflow-hidden font-body-md text-body-md text-on-surface">
+
+    <!-- ============ Mobile Top Header (md:hidden) ============ -->
+    <header class="md:hidden flex justify-between items-center px-6 h-16 w-full bg-surface border-b border-border-subtle absolute top-0 z-20">
+        <div class="flex items-center gap-2">
+            <button class="p-2 text-primary no-drag" onclick="document.getElementById('mobileNav').classList.toggle('-translate-x-full')">
+                <span class="material-symbols-outlined">menu</span>
+            </button>
+            <span class="font-headline-lg-mobile text-headline-lg-mobile font-bold text-action-orange-vibrant">Jarvis</span>
         </div>
-        <div class="title-bar-controls">
-            <button class="control-btn" id="minimizeBtn" title="Minimize">─</button>
-            <button class="control-btn" id="maximizeBtn" title="Maximize">□</button>
-            <button class="control-btn control-close" id="closeBtn" title="Close">✕</button>
+        <div class="flex items-center gap-3 no-drag">
+            <span class="material-symbols-outlined text-primary">account_circle</span>
+            <span class="material-symbols-outlined text-primary">tune</span>
         </div>
     </header>
 
-    <div class="app-body">
-        <!-- Sidebar: Chat History -->
-        <aside class="sidebar" id="sidebar">
-            <div class="sidebar-top">
-                <button class="new-chat-btn" id="newChatBtn">
-                    <span class="icon-plus">+</span>
-                    <span class="sidebar-text">Percakapan Baru</span>
-                </button>
-                <button class="toggle-sidebar-btn" id="toggle-sidebar-btn" title="Ciutkan sidebar">‹</button>
+    <!-- ============ Side Navigation ============ -->
+    <nav id="mobileNav"
+         class="bg-surface-container-low text-primary flex flex-col h-screen fixed md:relative left-0 top-0 overflow-y-auto w-64 border-r border-border-subtle z-30 transition-transform duration-300 transform -translate-x-full md:translate-x-0 flex-shrink-0">
+
+        <!-- Logo -->
+        <div class="p-4 flex items-center justify-between md:pt-6">
+            <div class="flex items-center gap-3">
+                <div class="w-10 h-10 rounded-lg bg-action-orange-vibrant flex items-center justify-center flex-shrink-0">
+                    <span class="text-white font-bold text-lg">J</span>
+                </div>
+                <div>
+                    <h1 class="font-headline-lg-mobile text-headline-lg-mobile font-black text-primary leading-tight">Jarvis AI</h1>
+                    <p class="font-label-sm text-label-sm text-secondary">Modern Intelligence</p>
+                </div>
             </div>
-            <div class="sidebar-section-label sidebar-text">Riwayat</div>
-            <nav class="conversation-list" id="conversationList">
-                <div class="conversation-empty sidebar-text" id="conversationEmptyState">Belum ada percakapan.</div>
+            <button class="md:hidden text-secondary no-drag" onclick="document.getElementById('mobileNav').classList.add('-translate-x-full')">
+                <span class="material-symbols-outlined">close</span>
+            </button>
+        </div>
+
+        <!-- New Chat -->
+        <div class="px-4 py-2">
+            <button id="newChatBtn" class="w-full bg-primary-container text-on-primary-container font-title-md text-title-md rounded-lg py-2.5 flex items-center justify-center gap-2 hover:brightness-110 transition-all duration-150 transform active:scale-95 font-semibold">
+                <span class="material-symbols-outlined">add_circle</span>
+                New Chat
+            </button>
+        </div>
+
+        <!-- Menu Items -->
+        <div class="flex-1 overflow-y-auto mt-4 space-y-1">
+            <a class="bg-primary-container/10 text-primary rounded-lg mx-2 my-1 px-4 py-2.5 flex items-center gap-3 font-medium" href="#">
+                <span class="material-symbols-outlined">history</span>
+                <span>History</span>
+            </a>
+            <a class="text-on-surface-variant hover:bg-surface-container-high mx-2 my-1 px-4 py-2.5 rounded-lg flex items-center gap-3 transition-colors duration-150" href="#">
+                <span class="material-symbols-outlined">dashboard</span>
+                <span>Templates</span>
+            </a>
+            <a class="text-on-surface-variant hover:bg-surface-container-high mx-2 my-1 px-4 py-2.5 rounded-lg flex items-center gap-3 transition-colors duration-150" href="#">
+                <span class="material-symbols-outlined">settings</span>
+                <span>Settings</span>
+            </a>
+
+            <!-- Conversation list (hidden for now, will be populated by JS when re-enabled) -->
+            <nav id="conversationList" class="hidden mt-2 space-y-1">
+                <div id="conversationEmptyState" class="px-4 py-2 text-sm text-secondary">Belum ada percakapan.</div>
             </nav>
-            <div class="sidebar-bottom">
-                <button class="settings-btn" id="settingsBtn">
-                    <span class="icon-settings">⚙</span>
-                    <span class="sidebar-text">Pengaturan</span>
+        </div>
+
+        <!-- Footer Links -->
+        <div class="p-4 border-t border-border-subtle space-y-1">
+            <a class="text-on-surface-variant hover:bg-surface-container-high px-4 py-2 rounded-lg flex items-center gap-3 transition-colors duration-150 text-sm" href="#">
+                <span class="material-symbols-outlined text-[20px]">help</span>
+                <span>Help</span>
+            </a>
+            <a class="text-on-surface-variant hover:bg-surface-container-high px-4 py-2 rounded-lg flex items-center gap-3 transition-colors duration-150 text-sm" href="#">
+                <span class="material-symbols-outlined text-[20px]">logout</span>
+                <span>Logout</span>
+            </a>
+        </div>
+    </nav>
+
+    <!-- ============ Main Chat Area ============ -->
+    <main class="flex-1 flex flex-col relative pt-16 md:pt-0 min-w-0">
+
+        <!-- Header Bar (also serves as Electron drag region) -->
+        <header class="drag-region h-14 flex items-center justify-between px-5 border-b border-border-subtle bg-surface/80 backdrop-blur-md sticky top-0 z-10 flex-shrink-0">
+            <!-- Left: Status -->
+            <div class="flex items-center gap-4 no-drag">
+                <div class="flex items-center gap-2 bg-surface-container-low px-3 py-1.5 rounded-full border border-border-subtle">
+                    <div class="w-2 h-2 rounded-full bg-green-500 pulse-dot"></div>
+                    <span id="statusText" class="font-label-sm text-label-sm text-on-surface font-medium">Ready</span>
+                </div>
+                <div class="hidden sm:flex items-center gap-2 text-secondary">
+                    <span class="material-symbols-outlined text-sm">memory</span>
+                    <span class="font-label-sm text-label-sm">Qwen 2.5 · Local</span>
+                </div>
+            </div>
+
+            <!-- Right: Actions + Window Controls -->
+            <div class="flex items-center gap-1 no-drag">
+                <!-- Code Preview Toggle -->
+                <button id="toggleCodeBtn" class="text-secondary hover:text-primary transition-colors p-2 rounded-lg hover:bg-surface-container" title="Toggle Code Preview">
+                    <span class="material-symbols-outlined">code</span>
+                </button>
+
+                <!-- Separator -->
+                <div class="w-px h-5 bg-border-subtle mx-1 hidden md:block"></div>
+
+                <!-- Window Controls (Electron frameless) -->
+                <button id="minimizeBtn" class="win-control w-9 h-9 flex items-center justify-center rounded-lg text-secondary" title="Minimize">
+                    <span class="material-symbols-outlined text-[18px]">minimize</span>
+                </button>
+                <button id="maximizeBtn" class="win-control w-9 h-9 flex items-center justify-center rounded-lg text-secondary" title="Maximize">
+                    <span class="material-symbols-outlined text-[18px]">crop_square</span>
+                </button>
+                <button id="closeBtn" class="win-close w-9 h-9 flex items-center justify-center rounded-lg text-secondary" title="Close">
+                    <span class="material-symbols-outlined text-[18px]">close</span>
                 </button>
             </div>
-        </aside>
+        </header>
 
-        <!-- Main Chat Column -->
-        <main class="chat-area">
-            <div class="chat-header">
-                <div class="status-indicator" id="statusIndicator">
-                    <span class="status-dot"></span>
-                    <span class="status-text" id="statusText">Ready</span>
-                </div>
-                <div class="model-info">Qwen 2.5 · Local</div>
-            </div>
+        <!-- Chat Canvas -->
+        <div class="flex-1 overflow-y-auto p-4 md:p-8 space-y-8" id="chatMessages">
+            <!-- Messages rendered dynamically by ui_handler.js -->
+        </div>
 
-            <div class="chat-messages-outer">
-                <div class="chat-messages" id="chatMessages">
-                    <!-- Pesan disuntikkan dinamis oleh ui_handler.js -->
-                </div>
-            </div>
-
-            <div class="chat-input-area">
-                <div class="chat-input-inner">
-                    <div id="imagePreviewContainer" class="image-preview-container hidden">
-                        <img id="imagePreview" class="image-preview" src="" alt="Preview">
-                        <button id="removeImageBtn" class="remove-image-btn" title="Hapus Gambar">✕</button>
-                    </div>
-
-                    <div class="input-wrapper">
-                        <button class="attach-btn" id="attachBtn" title="Lampirkan Gambar">📎</button>
-                        <input type="file" id="imageInput" accept="image/*" class="hidden">
-
-                        <input type="text" id="userInput" class="chat-input" placeholder="Ketik perintah Anda..." autofocus>
-
-                        <button class="voice-btn" id="voiceBtn" title="Voice Input">🎤</button>
-                        <button class="send-btn" id="sendBtn" title="Send">↑</button>
-                    </div>
+        <!-- Input Area -->
+        <div class="w-full shrink-0 p-4 md:px-8 pb-5">
+            <!-- Image Preview (above input) -->
+            <div id="imagePreviewContainer" class="hidden max-w-[720px] mx-auto mb-2">
+                <div class="relative inline-block">
+                    <img id="imagePreview" class="max-w-[180px] rounded-xl border border-border-subtle shadow-sm" src="" alt="Preview">
+                    <button id="removeImageBtn" class="absolute -top-2 -right-2 w-5 h-5 rounded-full bg-red-500 text-white text-[10px] flex items-center justify-center cursor-pointer border-none hover:bg-red-600 transition-colors" title="Hapus Gambar">
+                        <span class="material-symbols-outlined text-[12px]">close</span>
+                    </button>
                 </div>
             </div>
-        </main>
 
-        <!-- Code Preview Pane — placeholder, belum terhubung ke fitur manapun.
-             Struktur dipertahankan sesuai desain, collapsed default sampai
-             diputuskan mau dipakai untuk apa (misal preview file yang
-             dibuat lewat tool create_file). -->
-        <aside class="code-sidebar collapsed" id="code-sidebar">
-            <div class="code-header">
-                <span class="code-header-text sidebar-text" id="codeFileName">Code Preview</span>
-                <div class="code-header-actions">
-                    <button class="toggle-code-btn" id="toggle-code-btn" title="Toggle Code Preview">‹</button>
+            <!-- Glass Input Panel -->
+            <div class="max-w-[720px] mx-auto relative glass-panel rounded-[28px] shadow-sm transition-all duration-300 focus-within:ring-2 focus-within:ring-action-orange-vibrant/50 border border-border-subtle bg-surface-gray">
+                <div class="flex items-end px-4 py-3 gap-2">
+                    <button id="attachBtn" class="p-2 text-secondary hover:text-primary transition-colors rounded-full hover:bg-surface-container-high flex-shrink-0" title="Lampirkan Gambar">
+                        <span class="material-symbols-outlined">attach_file</span>
+                    </button>
+                    <input type="file" id="imageInput" accept="image/*" class="hidden">
+
+                    <textarea id="userInput"
+                              class="w-full bg-transparent border-none focus:ring-0 focus:outline-none resize-none max-h-32 py-2 font-body-md text-body-md text-on-surface placeholder:text-secondary leading-relaxed"
+                              placeholder="Message Jarvis..."
+                              rows="1"></textarea>
+
+                    <button id="voiceBtn" class="p-2 text-secondary hover:text-primary transition-colors rounded-full hover:bg-surface-container-high flex-shrink-0" title="Voice Input">
+                        <span class="material-symbols-outlined">mic</span>
+                    </button>
+                    <button id="sendBtn" class="p-2 bg-action-orange-vibrant text-white rounded-full hover:bg-primary transition-colors flex-shrink-0 shadow-sm flex items-center justify-center h-10 w-10" title="Send">
+                        <span class="material-symbols-outlined font-bold">arrow_upward</span>
+                    </button>
                 </div>
             </div>
-            <div class="code-content">
-                <div class="code-content-inner" id="codeContentInner">
-                    <div class="code-placeholder" id="codePlaceholder">
-                        Belum ada konten untuk ditampilkan di sini.
-                    </div>
-                </div>
-            </div>
-        </aside>
-    </div>
 
-    <!-- Template pesan (dipakai lewat JS .cloneNode) -->
+            <div class="mt-2 text-center pointer-events-none">
+                <span class="font-label-sm text-label-sm text-secondary/50">Jarvis can make mistakes. Consider verifying important information.</span>
+            </div>
+        </div>
+    </main>
+
+    <!-- ============ Code Preview Pane (hidden by default) ============ -->
+    <aside id="codePreview" class="hidden flex-col w-96 lg:w-[520px] border-l border-border-subtle bg-surface-container-lowest h-full z-20 absolute right-0 top-0 shadow-xl md:relative md:shadow-none flex-shrink-0">
+        <header class="h-14 flex items-center justify-between px-4 border-b border-border-subtle bg-surface flex-shrink-0">
+            <span id="codeFileName" class="font-title-md text-title-md font-semibold text-primary truncate">Preview</span>
+            <button id="closeCodeBtn" class="p-2 text-secondary hover:text-primary rounded-lg hover:bg-surface-container transition-colors" title="Close Preview">
+                <span class="material-symbols-outlined">close</span>
+            </button>
+        </header>
+        <div id="codeContentInner" class="flex-1 p-4 overflow-y-auto">
+            <div class="code-placeholder bg-surface-gray rounded-lg border border-border-subtle h-full p-4 flex items-center justify-center text-secondary font-body-md">
+                No active preview available.
+            </div>
+        </div>
+    </aside>
+
+    <!-- ============ Templates (cloned by JS) ============ -->
+
+    <!-- AI Message Template -->
     <template id="aiMessageTemplate">
-        <div class="ai-message-wrapper">
-            <div class="thinking-panel">
-                <div class="thinking-header">
-                    <span class="thinking-icon">◆</span>
-                    <span class="thinking-label">Memproses...</span>
-                    <span class="chevron">⌄</span>
-                </div>
-                <div class="thinking-body"></div>
+        <div class="flex gap-4">
+            <!-- Avatar -->
+            <div class="w-8 h-8 rounded-full bg-action-orange-vibrant flex items-center justify-center flex-shrink-0 mt-1">
+                <span class="text-white font-bold text-sm">J</span>
             </div>
-            <div class="message ai-message">
-                <div class="message-icon">J</div>
-                <div class="message-content message-bubble">
-                    <p class="message-text"><span class="typing-dots"><span></span><span></span><span></span></span></p>
+            <!-- Content Column -->
+            <div class="ai-message-wrapper flex-1 max-w-prose space-y-3 min-w-0">
+                <!-- Thinking Block (collapsible) -->
+                <details class="thinking-panel group">
+                    <summary class="thinking-header flex items-center gap-2 cursor-pointer text-secondary font-label-sm text-label-sm hover:text-primary transition-colors">
+                        <span class="material-symbols-outlined text-sm group-open:rotate-90 transition-transform duration-200 chevron">chevron_right</span>
+                        <span class="thinking-label flex items-center gap-2">
+                            Memproses...
+                            <span class="typing-dots flex gap-1">
+                                <span class="w-1 h-1 bg-secondary rounded-full animate-bounce"></span>
+                                <span class="w-1 h-1 bg-secondary rounded-full animate-bounce" style="animation-delay: 0.1s"></span>
+                                <span class="w-1 h-1 bg-secondary rounded-full animate-bounce" style="animation-delay: 0.2s"></span>
+                            </span>
+                        </span>
+                    </summary>
+                    <div class="thinking-body mt-2 pl-6 py-2 border-l-2 border-border-subtle text-secondary font-code-snippet text-code-snippet space-y-1"></div>
+                </details>
+
+                <!-- Message Bubble -->
+                <div class="bg-surface-container text-on-surface rounded-2xl rounded-tl-sm p-4 border border-border-subtle">
+                    <div class="message-text leading-relaxed">
+                        <span class="flex gap-1 py-1">
+                            <span class="w-1.5 h-1.5 bg-secondary/40 rounded-full animate-bounce"></span>
+                            <span class="w-1.5 h-1.5 bg-secondary/40 rounded-full animate-bounce" style="animation-delay: 0.1s"></span>
+                            <span class="w-1.5 h-1.5 bg-secondary/40 rounded-full animate-bounce" style="animation-delay: 0.2s"></span>
+                        </span>
+                    </div>
                 </div>
+                <!-- Response tags appended here by JS -->
             </div>
         </div>
     </template>
 
+    <!-- User Message Template -->
     <template id="userMessageTemplate">
-        <div class="message user-message">
-            <div class="message-content">
-                <p class="message-text"></p>
+        <div class="flex gap-4 flex-row-reverse">
+            <!-- Avatar -->
+            <div class="w-8 h-8 rounded-full bg-surface-container-high flex items-center justify-center flex-shrink-0 mt-1">
+                <span class="material-symbols-outlined text-secondary text-[18px]">person</span>
+            </div>
+            <!-- Message Bubble -->
+            <div class="flex-1 max-w-prose flex justify-end min-w-0">
+                <div class="bg-primary-container text-on-primary-container rounded-2xl rounded-tr-sm p-4 shadow-sm">
+                    <div class="message-text leading-relaxed"></div>
+                </div>
             </div>
         </div>
     </template>
 
+    <!-- Conversation Item Template (for sidebar, when re-enabled) -->
     <template id="conversationItemTemplate">
-        <a class="conv-item" href="#">
-            <span class="conv-icon">💬</span>
-            <span class="conv-title sidebar-text"></span>
-            <button class="conv-delete-btn" title="Hapus">🗑</button>
+        <a class="conv-item text-on-surface-variant hover:bg-surface-container-high mx-2 my-0.5 px-4 py-2 rounded-lg flex items-center gap-3 transition-colors duration-150 text-sm cursor-pointer" href="#">
+            <span class="material-symbols-outlined text-[18px]">chat_bubble_outline</span>
+            <span class="conv-title flex-1 truncate"></span>
+            <button class="conv-delete-btn text-secondary hover:text-error transition-colors p-0.5 rounded" title="Hapus">
+                <span class="material-symbols-outlined text-[16px]">delete_outline</span>
+            </button>
         </a>
     </template>
 
+    <!-- ============ Scripts ============ -->
+    <script src="lib/prism.js"></script>
+    <script src="lib/marked.min.js"></script>
     <script src="ui_handler.js"></script>
 </body>
 </html>

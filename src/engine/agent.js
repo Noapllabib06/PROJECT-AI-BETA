@@ -351,6 +351,8 @@ Pesan: "${userInput}"`;
                     const stream = await this.model.stream(messages);
                     for await (const chunk of stream) {
                         aiOutput += (chunk.content || "");
+                        // Add reasoning trace in real-time
+                        emitTrace(onTraceCallback, { type: 'reasoning', content: aiOutput });
                     }
                 } else {
                     const response = await this.model.invoke(messages);
@@ -538,11 +540,10 @@ Pesan: "${userInput}"`;
 
 ${rawSynthesisData}
 
-Rangkum 3-4 poin informasi PALING PENTING dan PALING RELEVAN dengan query di atas.
-Jawab langsung dalam bahasa natural (BUKAN format JSON), ringkas, dan mudah dibaca.
-WAJIB sertakan link sumber paling relevan di akhir jawaban.
-Jika hasil pencarian tidak relevan dengan query, katakan terus terang bahwa
-informasi yang ditemukan kurang relevan/kurang update, jangan memaksakan jawaban.`;
+Tugas Anda:
+1. Rangkum informasi dari hasil mentah di atas dengan DETAIL dan LENGKAP.
+2. Jawab langsung dalam bahasa natural, BUKAN format JSON.
+3. Jika hasil pencarian tidak relevan, katakan terus terang bahwa informasi yang ditemukan kurang relevan/kurang update.`;
 
                 try {
                     const currentTime = new Date().toLocaleString('id-ID', {
@@ -556,12 +557,15 @@ informasi yang ditemukan kurang relevan/kurang update, jangan memaksakan jawaban
                         second: '2-digit'
                     });
                     const synthesisResponse = await this.model.invoke([
-                        { role: 'system', content: PERSONA + `\n\nWaktu sistem saat ini: ${currentTime} WIB.` },
+                        { role: 'system', content: _prompt.PERSONA + '\n\n' + _prompt.GENERAL_ANSWER_RULES + `\n\nWaktu sistem saat ini: ${currentTime} WIB.` },
                         { role: 'user', content: synthesisPrompt }
                     ]);
                     const synthesized = (synthesisResponse.content || '').trim();
 
-                    finalOutput = synthesized + '\n' + finalOutput;
+                    // Hilangkan finalOutput (yang isinya "✅ search_web dieksekusi") 
+                    // agar chat tidak kotor dengan log eksekusi. Cukup kirim synthesized.
+                    finalOutput = synthesized;
+                    
                     if (onTokenCallback) onTokenCallback(finalOutput);
                     emitTrace(onTraceCallback, { type: 'done', retryAttempt: retryCount });
                     logger.jarvis(`[synthesized] ${synthesized.substring(0, 200)} (${Date.now() - t0}ms)`);

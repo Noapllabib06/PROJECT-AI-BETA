@@ -2,9 +2,12 @@
  * src/gui/ui_handler.js
  * Menghubungkan semua interaksi UI ke API window.jarvis (lewat preload.js).
  *
- * Ditulis ulang untuk mendukung 2 fitur baru:
- * - Chat History: sidebar percakapan (list/buat/pindah/hapus)
- * - Thinking Process: panel collapsible berisi trace tiap balasan AI
+ * Mendukung fitur:
+ * - Chat History: sidebar percakapan (list/buat/pindah/hapus) — sementara disabled
+ * - Thinking Process: panel collapsible (<details>) berisi trace tiap balasan AI
+ * - Code Preview: pane kanan untuk file draft & view
+ * - Code Cards: blok kode di chat jadi clickable card
+ * - Response Tags: badge tool yang digunakan di bawah pesan AI
  */
 
 // ===================== ELEMENT REFERENCES =====================
@@ -19,8 +22,6 @@ const imagePreview = document.getElementById('imagePreview');
 const removeImageBtn = document.getElementById('removeImageBtn');
 const statusText = document.getElementById('statusText');
 
-const sidebar = document.getElementById('sidebar');
-const toggleSidebarBtn = document.getElementById('toggle-sidebar-btn');
 const newChatBtn = document.getElementById('newChatBtn');
 const conversationList = document.getElementById('conversationList');
 const conversationEmptyState = document.getElementById('conversationEmptyState');
@@ -29,30 +30,64 @@ const minimizeBtn = document.getElementById('minimizeBtn');
 const maximizeBtn = document.getElementById('maximizeBtn');
 const closeBtn = document.getElementById('closeBtn');
 
+const codePreview = document.getElementById('codePreview');
+const codeContentInner = document.getElementById('codeContentInner');
+const codeFileName = document.getElementById('codeFileName');
+const toggleCodeBtn = document.getElementById('toggleCodeBtn');
+const closeCodeBtn = document.getElementById('closeCodeBtn');
+
 const aiMessageTemplate = document.getElementById('aiMessageTemplate');
 const userMessageTemplate = document.getElementById('userMessageTemplate');
 const conversationItemTemplate = document.getElementById('conversationItemTemplate');
 
 // ===================== STATE =====================
+const TOOL_LABELS = {
+    search_web: 'Web', read_webpage: 'Web', open_website: 'Web',
+    research_and_summarize: 'Riset',
+    check_email: 'Email',
+    play_music: 'Musik', play_video: 'Video',
+    search_youtube: 'YouTube', open_youtube_channel: 'YouTube',
+    create_file: 'File', read_file: 'File', ingest_codebase: 'Kode',
+    open_app: 'Aplikasi', control_volume: 'Sistem',
+    take_screenshot: 'Screenshot', analyze_screen: 'Vision',
+    save_memory: 'Memori', search_memory: 'Memori',
+    save_credential: 'Kredensial', list_credentials: 'Kredensial', delete_credential: 'Kredensial'
+};
+
+const TOOL_ICONS = {
+    'Web': 'language', 'Riset': 'science', 'Email': 'email',
+    'Musik': 'music_note', 'Video': 'videocam', 'YouTube': 'smart_display',
+    'File': 'description', 'Kode': 'code', 'Aplikasi': 'apps',
+    'Sistem': 'settings', 'Screenshot': 'screenshot_monitor',
+    'Vision': 'visibility', 'Memori': 'psychology',
+    'Kredensial': 'key'
+};
+
 let activeConversationId = null;
 let pendingImageBase64 = null;
-let isProcessing = false; // cegah kirim pesan bersamaan (satu request pada satu waktu)
+let isProcessing = false;
 
-// ===================== WINDOW CONTROLS =====================
+// ===================== WINDOW CONTROLS (Electron frameless) =====================
 minimizeBtn?.addEventListener('click', () => window.jarvis.minimizeWindow());
 maximizeBtn?.addEventListener('click', () => window.jarvis.maximizeWindow());
 closeBtn?.addEventListener('click', () => window.jarvis.closeWindow());
 
-// ===================== SIDEBAR TOGGLE =====================
-toggleSidebarBtn?.addEventListener('click', () => {
-    sidebar.classList.toggle('collapsed');
+// ===================== CODE PREVIEW PANE TOGGLE =====================
+toggleCodeBtn?.addEventListener('click', () => {
+    codePreview.classList.toggle('hidden');
+    codePreview.classList.toggle('flex');
 });
 
-// ===================== CODE PREVIEW PANE TOGGLE (placeholder) =====================
-const codeSidebar = document.getElementById('code-sidebar');
-const toggleCodeBtn = document.getElementById('toggle-code-btn');
-toggleCodeBtn?.addEventListener('click', () => {
-    codeSidebar.classList.toggle('collapsed');
+closeCodeBtn?.addEventListener('click', () => {
+    codePreview.classList.add('hidden');
+    codePreview.classList.remove('flex');
+});
+
+// ===================== TEXTAREA AUTO-RESIZE =====================
+userInput?.addEventListener('input', function () {
+    this.style.height = 'auto';
+    this.style.height = this.scrollHeight + 'px';
+    if (this.value === '') this.style.height = 'auto';
 });
 
 // ===================== THINKING PROCESS: LABEL MAPPING =====================
@@ -71,6 +106,9 @@ function formatTraceStep(step) {
             const list = (step.tools || []).map(t => `${t.tool}("${t.query}")`).join(', ');
             return `⚙️ Menjalankan: ${list}`;
         }
+        case 'reasoning': {
+            return `🧠 Memikirkan aksi:\n<div class="mt-1 p-2 bg-black/5 rounded text-xs font-code-snippet">${escapeHtml(step.content).replace(/\n/g, '<br>')}</div>`;
+        }
         case 'tool_result': {
             return (step.results || []).map(r =>
                 r.success ? `✅ ${r.tool} berhasil` : `❌ ${r.tool} gagal: ${r.error || 'unknown error'}`
@@ -82,27 +120,23 @@ function formatTraceStep(step) {
             return `⏱️ Info berpotensi usang, dialihkan ke pencarian web`;
         case 'synthesis_start':
             return `📝 Merangkum hasil tool jadi jawaban akhir...`;
-        case 'chat_response':
-            return `💬 Menjawab langsung tanpa tool`;
-        case 'final_fallback':
-            return `⚠️ Semua percobaan gagal — memberi jawaban permintaan maaf`;
-        case 'error':
-            return `🚨 Error: ${step.message}`;
         case 'done':
-            return `✔️ Selesai`;
-        case 'file_draft':
-            return `📄 Draft file "${step.filename}" dikirim ke Code Preview, menunggu konfirmasi`;
-        case 'file_view':
-            return `📄 Menampilkan isi "${step.filename}" di Code Preview`;
+            return `✔️ Selesai.`;
+        case 'chat_response':
+            return `💬 Merespons langsung tanpa tool.`;
+        case 'final_fallback':
+            return `⚠️ Gagal semua percobaan — kirim fallback.`;
+        case 'error':
+            return `❌ Error: ${step.message || 'Tidak diketahui'}`;
         default:
             return `• ${step.type}`;
     }
 }
 
 function traceStepLabel(step) {
-    // Label singkat yang tampil di header panel (sebelum diklik buka)
     switch (step.type) {
         case 'routing': return 'Menganalisis permintaan...';
+        case 'reasoning': return 'Memutuskan langkah...';
         case 'tool_call': return 'Menjalankan tool...';
         case 'tool_result': return 'Memproses hasil tool...';
         case 'retry': return `Mencoba ulang (percobaan ${step.attempt})...`;
@@ -116,11 +150,10 @@ function traceStepLabel(step) {
 }
 
 // ===================== CODE PREVIEW PANE (File Draft / View) =====================
-const codeContentInner = document.getElementById('codeContentInner');
-const codeFileName = document.getElementById('codeFileName');
 
 function expandCodeSidebar() {
-    codeSidebar.classList.remove('collapsed');
+    codePreview.classList.remove('hidden');
+    codePreview.classList.add('flex');
 }
 
 /**
@@ -130,7 +163,6 @@ function expandCodeSidebar() {
 function renderFileDraft(filename, content) {
     expandCodeSidebar();
     codeFileName.textContent = filename;
-
     codeContentInner.innerHTML = '';
 
     const textarea = document.createElement('textarea');
@@ -139,36 +171,36 @@ function renderFileDraft(filename, content) {
     codeContentInner.appendChild(textarea);
 
     const actions = document.createElement('div');
-    actions.className = 'code-actions';
+    actions.className = 'flex gap-2 mt-3';
 
     const saveBtn = document.createElement('button');
-    saveBtn.className = 'code-btn code-btn-save';
+    saveBtn.className = 'px-4 py-2 bg-green-600 text-white rounded-lg text-sm font-semibold hover:bg-green-700 transition-colors';
     saveBtn.textContent = 'Simpan';
 
     const discardBtn = document.createElement('button');
-    discardBtn.className = 'code-btn code-btn-discard';
+    discardBtn.className = 'px-4 py-2 bg-surface-container-high text-on-surface rounded-lg text-sm font-medium hover:bg-surface-dim transition-colors';
     discardBtn.textContent = 'Batalkan';
 
     const statusMsg = document.createElement('div');
-    statusMsg.className = 'code-status-msg';
+    statusMsg.className = 'text-sm mt-2';
 
     saveBtn.addEventListener('click', async () => {
         saveBtn.disabled = true;
         saveBtn.textContent = 'Menyimpan...';
         const result = await window.jarvis.confirmSaveFile({
             filename,
-            content: textarea.value // pakai versi yang sudah diedit user jika ada
+            content: textarea.value
         });
 
         if (result?.success) {
             statusMsg.textContent = `✅ Tersimpan di ${result.filePath} (${result.sizeKB} KB)`;
-            statusMsg.classList.add('success');
+            statusMsg.className = 'text-sm mt-2 text-green-600';
             textarea.disabled = true;
             saveBtn.remove();
             discardBtn.textContent = 'Tutup';
         } else {
             statusMsg.textContent = `❌ Gagal menyimpan: ${result?.error || 'unknown error'}`;
-            statusMsg.classList.add('error');
+            statusMsg.className = 'text-sm mt-2 text-error';
             saveBtn.disabled = false;
             saveBtn.textContent = 'Simpan';
         }
@@ -185,44 +217,107 @@ function renderFileDraft(filename, content) {
 }
 
 /**
- * Render isi file hasil read_file — read-only, tanpa tombol simpan
- * (karena file ini sudah ada di disk, bukan draft baru).
+ * Render isi file hasil read_file — read-only, tanpa tombol simpan.
  */
 function renderFileView(filename, content) {
     expandCodeSidebar();
     codeFileName.textContent = filename;
-
     codeContentInner.innerHTML = '';
+
+    // Determine language from filename extension
+    let lang = 'javascript';
+    const extMatch = filename.match(/\.([a-z0-9]+)$/i);
+    if (extMatch) {
+        const ext = extMatch[1].toLowerCase();
+        const map = {
+            'js': 'javascript', 'html': 'html', 'css': 'css',
+            'py': 'python', 'json': 'json', 'md': 'markdown'
+        };
+        lang = map[ext] || ext;
+    }
+
     const pre = document.createElement('pre');
     pre.className = 'code-view';
-    pre.textContent = content;
+
+    const codeEl = document.createElement('code');
+    codeEl.className = `language-${lang}`;
+    codeEl.textContent = content;
+
+    pre.appendChild(codeEl);
     codeContentInner.appendChild(pre);
+
+    // Apply Prism highlighting
+    if (window.Prism) {
+        Prism.highlightElement(codeEl);
+    }
 }
 
 function clearCodePreview() {
-    codeFileName.textContent = 'Code Preview';
-    codeContentInner.innerHTML = '<div class="code-placeholder">Belum ada konten untuk ditampilkan di sini.</div>';
+    codeFileName.textContent = 'Preview';
+    codeContentInner.innerHTML = '<div class="bg-surface-gray rounded-lg border border-border-subtle h-full p-4 flex items-center justify-center text-secondary font-body-md">No active preview available.</div>';
+    codePreview.classList.add('hidden');
+    codePreview.classList.remove('flex');
 }
 
 // ===================== MARKDOWN RENDERING (RINGAN) =====================
-/**
- * Konversi markdown dasar ke HTML, dengan escape HTML dulu (anti-XSS)
- * sebelum menerapkan rule markdown. Cukup untuk kebutuhan Jarvis:
- * bold, newline, bullet list, dan link — bukan parser markdown lengkap.
- */
+
 function escapeHtml(text) {
     const div = document.createElement('div');
     div.textContent = text;
     return div.innerHTML;
 }
 
+let codeSnippetCounter = 0;
+
+function extractCodeBlocksAsCards(text) {
+    const codeBlockRegex = /```(\w+)?\n([\s\S]*?)```/g;
+    let cardsHtml = [];
+    const cleanedText = text.replace(codeBlockRegex, (match, lang, code) => {
+        codeSnippetCounter++;
+        const id = `snippet-${codeSnippetCounter}-${Date.now()}`;
+        const language = lang || 'text';
+        cardsHtml.push({ id, language, code: code.trim() });
+        return `__CODE_CARD_${id}__`;
+    });
+    return { cleanedText, cardsHtml };
+}
+
+function buildCodeCardHtml(id, language) {
+    return `<div class="code-card flex items-center gap-3 p-3 bg-surface-gray rounded-lg border border-border-subtle my-2 cursor-pointer hover:bg-surface-container-high transition-colors" data-id="${id}" data-lang="${language}">
+        <span class="material-symbols-outlined text-secondary" style="font-size:18px">description</span>
+        <span class="flex-1 text-sm font-medium text-on-surface font-code-snippet">Kode ${escapeHtml(language)}</span>
+        <span class="text-xs text-primary font-semibold">Lihat →</span>
+    </div>`;
+}
+
 function renderMarkdownLite(text) {
-    let html = escapeHtml(text);
+    if (!text) return '';
+
+    const { cleanedText, cardsHtml } = extractCodeBlocksAsCards(text);
+    let html = escapeHtml(cleanedText);
+
     html = html.replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>');
     html = html.replace(/\[([^\]]+)\]\((https?:\/\/[^\s)]+)\)/g, '<a href="$2" target="_blank">$1</a>');
     html = html.replace(/(?<!href="|>)(https?:\/\/[^\s<]+)/g, '<a href="$1" target="_blank">$1</a>');
-    html = html.replace(/^[•\-]\s+(.+)$/gm, '<span class="bullet-line">• $1</span>');
+
+    html = html.replace(/^(\d+)\.\s+(.+)$/gm, '<li class="ol-line">$2</li>');
+    html = html.replace(/^[ \t]*[•\-]\s+(.+)$/gm, '<li class="bullet-line">$1</li>');
+
+    html = html.replace(/(<li class="ol-line">.*?<\/li>\n?)+/gs, (match) => `<ol>${match.replace(/\n/g, '')}</ol>`);
+    html = html.replace(/(<li class="bullet-line">.*?<\/li>\n?)+/gs, (match) => `<ul>${match.replace(/\n/g, '')}</ul>`);
+
+    html = html.replace(/\n{2,}/g, '<br>');
     html = html.replace(/\n/g, '<br>');
+
+    // Inject code cards (after escape, so HTML is safe)
+    cardsHtml.forEach(card => {
+        html = html.replace(`__CODE_CARD_${card.id}__`, buildCodeCardHtml(card.id, card.language));
+    });
+
+    // Store code snippets for retrieval on card click
+    window._codeSnippets = window._codeSnippets || {};
+    cardsHtml.forEach(card => { window._codeSnippets[card.id] = card.code; });
+
     return html;
 }
 
@@ -255,19 +350,25 @@ function renderAiMessagePlaceholder() {
     const thinkingBody = wrapper.querySelector('.thinking-body');
     const thinkingHeader = wrapper.querySelector('.thinking-header');
     const messageText = wrapper.querySelector('.message-text');
-
-    // Klik header untuk buka/tutup panel
-    thinkingHeader.addEventListener('click', () => {
-        thinkingPanel.classList.toggle('expanded');
-    });
+    // <details> handles expand/collapse natively — no click handler needed
 
     return { wrapper, thinkingPanel, thinkingLabel, thinkingBody, thinkingHeader, messageText };
 }
 
 function appendTraceStepToPanel(refs, step) {
     const row = document.createElement('div');
-    row.className = 'thinking-step';
-    row.innerHTML = `<span class="step-icon">›</span><span>${formatTraceStep(step).replace(/\n/g, '<br>')}</span>`;
+    row.className = 'flex gap-2 py-0.5 text-xs';
+    row.innerHTML = `<span class="text-secondary/50 flex-shrink-0 mt-0.5">›</span><span>${formatTraceStep(step).replace(/\\n/g, '<br>')}</span>`;
+
+    if (step.type === 'reasoning') {
+        const lastRow = refs.thinkingBody.lastElementChild;
+        if (lastRow && lastRow.dataset.type === 'reasoning') {
+            lastRow.innerHTML = row.innerHTML;
+            return;
+        }
+        row.dataset.type = 'reasoning';
+    }
+
     refs.thinkingBody.appendChild(row);
     refs.thinkingLabel.textContent = traceStepLabel(step);
 }
@@ -279,7 +380,7 @@ function renderStoredMessage(msg) {
     } else if (msg.role === 'assistant') {
         const node = aiMessageTemplate.content.cloneNode(true);
         const wrapper = node.querySelector('.ai-message-wrapper');
-        // Percakapan lama tidak punya trace tersimpan — sembunyikan panel thinking
+        // Percakapan lama tidak punya trace — hapus thinking panel
         wrapper.querySelector('.thinking-panel').remove();
         wrapper.querySelector('.message-text').innerHTML = renderMarkdownLite(msg.content);
         chatMessages.appendChild(node);
@@ -295,7 +396,7 @@ function renderWelcomeMessage() {
     const node = aiMessageTemplate.content.cloneNode(true);
     const wrapper = node.querySelector('.ai-message-wrapper');
     wrapper.querySelector('.thinking-panel').remove();
-    wrapper.querySelector('.message-text').textContent = 'Halo! Saya Jarvis, asisten AI pribadi Anda. Ada yang bisa saya bantu?';
+    wrapper.querySelector('.message-text').textContent = 'Hello. I am Jarvis. How can I assist you with your project today?';
     chatMessages.appendChild(node);
 }
 
@@ -309,6 +410,7 @@ async function sendMessage() {
     isProcessing = true;
     sendBtn.disabled = true;
     userInput.value = '';
+    userInput.style.height = 'auto'; // reset textarea height
 
     renderUserMessage(text || '[Gambar terlampir]');
     const refs = renderAiMessagePlaceholder();
@@ -320,12 +422,25 @@ async function sendMessage() {
     clearPendingImage();
     statusText.textContent = 'Memproses...';
 
-    // Listener token & trace di-attach sekali per request, lalu dilepas
-    // setelah selesai — karena channel IPC-nya global (bukan per-request).
     let firstTokenReceived = false;
     let rawBuffer = '';
+    let usedTools = new Set();
+
+    const STATUS_TOKEN_PATTERNS = [
+        /^Memproses\.\.\.\s*$/,
+        /^Menjalankan:.+\.\.\.\s*$/,
+        /^\s*Merangkum hasil\.\.\.\s*$/
+    ];
+
+    function isStatusToken(token) {
+        return STATUS_TOKEN_PATTERNS.some(pattern => pattern.test(token.trim()));
+    }
 
     const onToken = (token) => {
+        if (isStatusToken(token)) {
+            refs.thinkingLabel.textContent = token.trim();
+            return;
+        }
         if (!firstTokenReceived) {
             refs.messageText.textContent = '';
             firstTokenReceived = true;
@@ -336,9 +451,11 @@ async function sendMessage() {
     };
 
     const onTrace = (step) => {
+        if (step.type === 'tool_call') {
+            step.tools.forEach(t => usedTools.add(t.tool));
+        }
         appendTraceStepToPanel(refs, step);
-        // Dua tipe trace khusus ini ditangani terpisah untuk mengisi
-        // Code Preview pane, bukan cuma tampil di panel thinking.
+        // Dua tipe trace khusus ini ditangani terpisah untuk mengisi Code Preview pane
         if (step.type === 'file_draft') {
             renderFileDraft(step.filename, step.content);
         } else if (step.type === 'file_view') {
@@ -360,15 +477,29 @@ async function sendMessage() {
             refs.messageText.innerHTML = renderMarkdownLite(finalText);
         }
         refs.thinkingLabel.textContent = 'Proses berpikir selesai';
-        refs.thinkingHeader.querySelector('.chevron').style.display = 'inline-block';
     } catch (err) {
         refs.messageText.textContent = `❌ Terjadi kesalahan: ${err.message || err}`;
     } finally {
-        statusText.textContent = 'Siap';
+        statusText.textContent = 'Ready';
         isProcessing = false;
         sendBtn.disabled = false;
-        // Refresh sidebar supaya judul percakapan (auto-generate dari pesan pertama) ikut update
-        loadConversationList();
+
+        // Render response tags (tool badges)
+        if (usedTools.size > 0) {
+            const tagsContainer = document.createElement('div');
+            tagsContainer.className = 'flex gap-2 flex-wrap';
+            usedTools.forEach(toolName => {
+                const label = TOOL_LABELS[toolName] || toolName;
+                const icon = TOOL_ICONS[label] || 'smart_toy';
+                const tag = document.createElement('span');
+                tag.className = 'font-label-sm text-label-sm bg-surface-container-high px-2 py-1 rounded-full text-secondary flex items-center gap-1';
+                tag.innerHTML = `<span class="material-symbols-outlined" style="font-size:14px">${icon}</span> ${escapeHtml(label)}`;
+                tagsContainer.appendChild(tag);
+            });
+            refs.wrapper.appendChild(tagsContainer);
+        }
+
+        // loadConversationList(); // disabled for now
     }
 }
 
@@ -380,6 +511,16 @@ userInput?.addEventListener('keydown', (e) => {
     }
 });
 
+// Code card click handler (event delegation)
+chatMessages.addEventListener('click', (e) => {
+    const card = e.target.closest('.code-card');
+    if (!card) return;
+    const id = card.dataset.id;
+    const lang = card.dataset.lang;
+    const code = window._codeSnippets?.[id];
+    if (code) renderFileView(`snippet.${lang}`, code);
+});
+
 // ===================== IMAGE ATTACHMENT =====================
 attachBtn?.addEventListener('click', () => imageInput.click());
 
@@ -388,7 +529,6 @@ imageInput?.addEventListener('change', (e) => {
     if (!file) return;
     const reader = new FileReader();
     reader.onload = () => {
-        // Buang prefix "data:image/...;base64," — kirim base64 murni ke backend
         pendingImageBase64 = reader.result.split(',')[1];
         imagePreview.src = reader.result;
         imagePreviewContainer.classList.remove('hidden');
@@ -439,7 +579,7 @@ function initVoiceRecognition() {
 voiceBtn?.addEventListener('click', () => {
     if (!recognition) recognition = initVoiceRecognition();
     if (!recognition) {
-        statusText.textContent = 'Voice input tidak didukung di perangkat ini';
+        statusText.textContent = 'Voice input tidak didukung';
         return;
     }
     if (isListening) {
@@ -454,6 +594,8 @@ voiceBtn?.addEventListener('click', () => {
 });
 
 // ===================== CHAT HISTORY / CONVERSATIONS =====================
+// Fungsi-fungsi ini dipertahankan tapi belum dipanggil di init() —
+// siap diaktifkan kembali nanti.
 
 async function loadConversationList() {
     const conversations = await window.jarvis.listConversations();
@@ -469,10 +611,10 @@ async function loadConversationList() {
         const item = node.querySelector('.conv-item');
         item.dataset.id = conv.id;
         item.querySelector('.conv-title').textContent = conv.title;
-        if (conv.id === activeConversationId) item.classList.add('active');
+        if (conv.id === activeConversationId) item.classList.add('bg-primary-container/10', 'text-primary');
 
         item.addEventListener('click', (e) => {
-            if (e.target.closest('.conv-delete-btn')) return; // biar tidak switch saat klik hapus
+            if (e.target.closest('.conv-delete-btn')) return;
             switchToConversation(conv.id);
         });
 
@@ -521,14 +663,7 @@ newChatBtn?.addEventListener('click', startNewConversation);
 // ===================== INIT =====================
 async function init() {
     window.jarvis.windowReady();
-
-    const conversations = await window.jarvis.listConversations();
-    if (conversations && conversations.length > 0) {
-        // Buka percakapan paling baru secara default
-        await switchToConversation(conversations[0].id);
-    } else {
-        await startNewConversation();
-    }
+    renderWelcomeMessage();
 }
 
 init();

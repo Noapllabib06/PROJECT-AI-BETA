@@ -26,6 +26,7 @@
     "mailparser": "^3.9.14",
     "marked": "^18.0.9",
     "play-dl": "^1.9.7",
+    "prismjs": "^1.30.0",
     "screenshot-desktop": "^1.15.4"
   },
   "devDependencies": {

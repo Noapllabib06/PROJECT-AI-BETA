@@ -259,6 +259,18 @@ async function scrape_web_tool(url) {
         });
         const $ = cheerio.load(response.data);
         $('script, style, nav, footer, header, iframe, noscript, svg, form, button, input').remove();
+        
+        let images = [];
+        $('img').each((i, el) => {
+            let src = $(el).attr('src') || $(el).attr('data-src');
+            if (src && src.startsWith('http') && !src.includes('data:image') && !src.includes('logo') && !src.includes('icon')) {
+                images.push(src);
+            }
+        });
+        // Filter unik & batasi maksimal 5 gambar
+        images = [...new Set(images)].slice(0, 5);
+        let imagesText = images.length > 0 ? `\n\n🖼️ **Galeri Gambar:**\n${images.map(src => `![Image](${src})`).join('\n')}` : '';
+
         let text = '';
         $('p, h1, h2, h3, h4, h5, h6, li, td, th, blockquote, pre, code, article, section, div.content, div.main, div.article-body').each((i, el) => {
             const line = $(el).text().trim();
@@ -271,10 +283,10 @@ async function scrape_web_tool(url) {
             logger.tool('scrape_web_tool', `Chunked: ${stats.totalChunks} chunks, ${stats.totalChars} chars (${duration}ms)`);
             const summary = chunks.find(c => c.isSummary) || chunks[0];
             const conclusion = chunks.find(c => c.isConclusion) || chunks[chunks.length - 1];
-            return `📄 **Konten dari ${targetUrl}**\n\n📊 Statistik: ${stats.totalChunks} chunks, ${stats.totalChars} total chars\n\n📝 **Ringkasan:**\n${summary.text}\n\n💡 **Info:** Konten telah di-chunking.\n\n🔗 **Sumber:** ${targetUrl}`;
+            return `📄 **Konten dari ${targetUrl}**\n\n📊 Statistik: ${stats.totalChunks} chunks, ${stats.totalChars} total chars\n\n📝 **Ringkasan:**\n${summary.text}\n\n💡 **Info:** Konten telah di-chunking.${imagesText}\n\n🔗 **Sumber:** ${targetUrl}`;
         } else {
             logger.tool('scrape_web_tool', `Success (${duration}ms, ${text.length} chars)`);
-            return `📄 **Konten dari ${targetUrl}**\n\n${text}`;
+            return `📄 **Konten dari ${targetUrl}**\n\n${text}${imagesText}`;
         }
     } catch (error) {
         logger.error('scrape_web_tool', error, { url });
@@ -309,7 +321,7 @@ async function search_web_tool(query) {
             }
             const snippet = $(el).find('.compText, .fz-ms').text().replace(/\s+/g, ' ').trim();
             if (title && link) {
-                results.push(`📌 **${title}**\n📝 ${snippet || '(Tidak ada deskripsi)'}\n🔗 ${link}\n`);
+                results.push(`${results.length + 1}. ${title}\n   Link: ${link}\n   Deskripsi: ${snippet || '(Tidak ada deskripsi)'}\n`);
             }
         });
         if (results.length === 0) return "Maaf, tidak ada hasil yang ditemukan. Mesin pencari mungkin meminta verifikasi Captcha.";
@@ -410,7 +422,7 @@ const webTools = [
                     }
                     const snippet = $(el).find('.compText, .fz-ms').text().replace(/\s+/g, ' ').trim();
                     if (title && link) {
-                        results.push(`📌 **${title}**\n📝 ${snippet || '(Tidak ada deskripsi)'}\n🔗 ${link}\n`);
+                        results.push(`${results.length + 1}. ${title}\n   Link: ${link}\n   Deskripsi: ${snippet || '(Tidak ada deskripsi)'}\n`);
                     }
                 });
 

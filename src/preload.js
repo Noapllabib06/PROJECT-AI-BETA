@@ -13,11 +13,13 @@ contextBridge.exposeInMainWorld('jarvis', {
     
     /** Listener untuk token streaming dari AI */
     onStreamToken: (callback) => {
+        ipcRenderer.removeAllListeners('stream-token');
         ipcRenderer.on('stream-token', (event, token) => callback(token));
     },
     
     /** Listener untuk status update */
     onStatusUpdate: (callback) => {
+        ipcRenderer.removeAllListeners('status-update');
         ipcRenderer.on('status-update', (event, data) => callback(data));
     },
 
@@ -31,6 +33,7 @@ contextBridge.exposeInMainWorld('jarvis', {
      * 'done', 'error', 'final_fallback'
      */
     onTraceUpdate: (callback) => {
+        ipcRenderer.removeAllListeners('trace-update');
         ipcRenderer.on('trace-update', (event, traceStep) => callback(traceStep));
     },
     

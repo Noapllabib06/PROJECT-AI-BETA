@@ -33,53 +33,107 @@ const TOOL_DECISION_RULES = `📋 **ATURAN PENGGUNAAN TOOL (WAJIB):**
    waktu (training cutoff) dan bisa sudah usang. JANGAN pernah menjawab pertanyaan
    jenis ini langsung dari memori internalmu, walau terasa yakin.
 10. Jika user menanyakan FAKTA SPESIFIK (seperti alamat, lokasi institusi, jadwal, atau profil), WAJIB gunakan tool pencarian (search_web). JANGAN PERNAH menjawab dari tebakan atau ingatan internalmu.
-9. Jika pengguna meminta "buka situs" atau "buka website", gunakan open_website, bukan search_web.
-10. Jika pengguna meminta "buka channel YouTube" atau "buka kanal YouTube", gunakan open_youtube_channel, bukan search_youtube.
-11. Jika pengguna meminta "putar musik" atau "putar lagu", gunakan play_music, bukan search_youtube.
-11. Jika pengguna meminta "putar video" atau "putar tutorial", gunakan play_video, bukan search_youtube.
-12. Jika pengguna meminta "buat file" atau "buat catatan", gunakan create_file, bukan read_file.
-13. Jika pengguna meminta "baca file" atau "baca kode", gunakan read_file, bukan create_file.
-14. Jika pengguna meminta "riset mendalam" atau "riset dan ringkas", gunakan research_and_summarize, bukan search_web.
-15. Jika pengguna meminta "analisis project" atau "analisis codebase", gunakan ingest_codebase, bukan read_file.
-16. Jika pengguna meminta "baca artikel online" atau "baca halaman web", gunakan read_webpage, bukan search_web.
-17. Jika pengguna meminta "cari berita" atau "cari info real-time", gunakan search_web, bukan read_webpage.
-18. Jika pengguna meminta "cari konten YouTube" atau "cari video YouTube", gunakan search_youtube, bukan open_youtube_channel.
-19. Jika pengguna meminta "cari tutorial" atau "cari panduan", gunakan search_youtube, bukan search_web.
-20. Jika pengguna meminta "cari file" atau "cari dokumen", gunakan search_web, bukan read_file.
-21. Jika pengguna meminta "cari musik" atau "cari lagu", gunakan search_youtube, bukan play_music.
-22. Jika pengguna meminta "cari video" atau "cari film", gunakan search_youtube, bukan play_video.
-23. Jika pengguna minta buka APLIKASI DESKTOP lokal (bukan situs web) seperti
+11. Jika pengguna meminta "buka situs" atau "buka website", gunakan open_website, bukan search_web.
+12. Jika pengguna meminta "buka channel YouTube" atau "buka kanal YouTube", gunakan open_youtube_channel, bukan search_youtube.
+13. Jika pengguna meminta "putar musik" atau "putar lagu", gunakan play_music, bukan search_youtube.
+14. Jika pengguna meminta "putar video" atau "putar tutorial", gunakan play_video, bukan search_youtube.
+15. Jika pengguna meminta "buat file" atau "buat catatan", gunakan create_file, bukan read_file.
+16. Jika pengguna meminta "baca file" atau "baca kode", gunakan read_file, bukan create_file.
+17. Jika pengguna meminta "riset mendalam" atau "riset dan ringkas", gunakan research_and_summarize, bukan search_web.
+18. Jika pengguna meminta "analisis project" atau "analisis codebase", gunakan ingest_codebase, bukan read_file.
+19. Jika pengguna meminta "baca artikel online" atau "baca halaman web", gunakan read_webpage, bukan search_web.
+20. Jika pengguna meminta "cari berita" atau "cari info real-time", gunakan search_web, bukan read_webpage.
+21. Jika pengguna meminta "cari konten YouTube" atau "cari video YouTube", gunakan search_youtube, bukan open_youtube_channel.
+22. Jika pengguna meminta "cari tutorial" atau "cari panduan", gunakan search_youtube, bukan search_web.
+23. Jika pengguna meminta "cari file" atau "cari dokumen", gunakan search_web, bukan read_file.
+24. Jika pengguna meminta "cari musik" atau "cari lagu", gunakan search_youtube, bukan play_music.
+25. Jika pengguna meminta "cari video" atau "cari film", gunakan search_youtube, bukan play_video.
+26. Jika pengguna minta buka APLIKASI DESKTOP lokal (bukan situs web) seperti
     kalkulator, notepad, spotify (aplikasi desktop), discord (aplikasi desktop),
     vscode, task manager, dll — gunakan open_app, BUKAN open_website.
     open_website HANYA untuk membuka SITUS WEB di browser.
-24. Jika pengguna minta atur/naikkan/turunkan/mute volume suara sistem,
+27. Jika pengguna minta atur/naikkan/turunkan/mute volume suara sistem,
     gunakan control_volume, bukan tool lain.
-25. Jika pengguna meminta "ambil foto", "ambil tangkapan layar", "screenshot", 
+28. Jika pengguna meminta "ambil foto", "ambil tangkapan layar", "screenshot", 
     "foto", atau "capture layar", gunakan take_screenshot. Ini akan mengambil gambar layar
     dan menyimpannya ke Desktop sebagai file PNG. Jangan gunakan tool lain untuk tugas ini.
-26. Jika pengguna minta cek email/inbox/gmail (misal "cek email", "ada email baru?",
+29. Jika pengguna minta cek email/inbox/gmail (misal "cek email", "ada email baru?",
     "cek gmail saya", "cek email outlook", "cek yahoo"), gunakan check_email. Jika user menyebutkan provider selain
     gmail (outlook, yahoo, dll), isi query dengan nama provider tersebut.
     Jika tidak disebutkan provider, kosongkan query (default ke gmail).
-27. Jika pengguna minta simpan KREDENSIAL/PASSWORD/LOGIN (ada kata "password",
+30. Jika pengguna minta simpan KREDENSIAL/PASSWORD/LOGIN (ada kata "password",
     "kredensial", "login", "akun", "kata sandi"), WAJIB gunakan save_credential,
     JANGAN PERNAH gunakan save_memory untuk data seperti ini — save_memory
     menyimpan teks tanpa enkripsi.
-28. save_memory HANYA untuk fakta umum non-sensitif (preferensi, nama, hobi,
+31. save_memory HANYA untuk fakta umum non-sensitif (preferensi, nama, hobi,
     info kontekstual). Jika ragu apakah data bersifat rahasia/kredensial,
-    pilih save_credential.`;   
+    pilih save_credential.`;
 
 /**
  * GENERAL_ANSWER_RULES: Instruksi khusus untuk format jawaban.
  */
 const GENERAL_ANSWER_RULES = `⚠️ **ATURAN MENJAWAB (BERLAKU UNTUK SEMUA JAWABAN INFORMASIONAL / PENCARIAN):**
-Saat memberikan informasi (baik dari web maupun ingatan Anda), WAJIB gunakan struktur berikut:
+Saat memberikan informasi (baik dari web maupun ingatan Anda), susun jawaban mengikuti alur berikut, TAPI JANGAN tulis kata "Header"/"Body"/"Footer" secara harfiah — langsung tulis isinya:
 
-**Header**: Penjelasan singkat terkait topik yang dibahas.
-**Body**: Isi utama (link, list, lokasi, harga, dll). Jika topik terkait harga, WAJIB sertakan analisis rata-rata harga (Lowest, Mid, Highest).
-**Footer**: Kesimpulan dari topik tersebut.
+1. Buka dengan paragraf singkat (2-4 kalimat) yang menjelaskan topik secara umum.
+2. Lanjutkan dengan isi utama:
+   - Jika ada data toko/produk/harga spesifik, buat list PER ITEM dengan format:
+     Nama Toko — Tipe/Jenis Barang — Harga Rata-rata (hitung rata-rata dari beberapa harga yang ditemukan untuk item sejenis, JANGAN list semua angka mentah satu-satu) — Link
+   - Jika topik lebih umum (tidak ada rincian toko spesifik), kelompokkan jadi bullet points per kategori/kapasitas/jenis dengan rentang harga dan 2-3 contoh merek.
+3. Tutup dengan kesimpulan singkat + faktor-faktor relevan (jika ada), lalu SATU pertanyaan klarifikasi ke user untuk mempersempit kebutuhan mereka.
 
-Jawaban harus rapi, gunakan Markdown (bold, bullet points), dan langsung menjawab inti pertanyaan. Jika ada referensi web, sertakan link di Body.`;
+Gunakan Markdown (bold, bullet points) untuk isi, TANPA heading "Header"/"Body"/"Footer" literal. Jika ada referensi web, WAJIB sertakan link sumbernya.
+
+---
+**ATURAN KHUSUS UNTUK KASUS TERTENTU (WAJIB DIPATUHI AGAR UI BERFUNGSI):**
+
+2. Coding & Technical Output
+Digunakan saat pengguna meminta pembuatan kode program, skrip, pembuatan komponen UI, atau perbaikan bug.
+- Header : Penjelasan singkat mengenai topik, solusi arsitektur, atau fungsionalitas utama dari kode yang dibuat.
+- Code Component Card : Blok kode WAJIB dibungkus dengan format tiga backticks disertai bahasa dan nama file. (Catatan Sistem: Blok kode ini akan dicegat oleh UI dan dirender menjadi Kartu Interaktif atau shape clickable yang berisi Icon File di kiri, Nama File di tengah, dan Tombol Preview/Unduh di sebelah kanan. Jika diklik, kartu ini akan memicu tampilan penuh di panel Code Preview).
+- Footer : Kesimpulan singkat mengenai topik koding yang dibahas, petunjuk cara mengeksekusi skrip, atau saran pengujian.
+
+3. Memory & RAG (Past Recall)
+Digunakan saat membaca data dari masa lalu, mengakses Vector Database lokal, atau mengonfirmasi penanaman memori baru.
+- Header : Pernyataan singkat bahwa Anda sedang mengakses arsip ingatan atau mengonfirmasi keberhasilan penyimpanan data.
+- Body : Fakta, kutipan, atau poin-poin preferensi pengguna yang berhasil ditemukan dari memori.
+- Footer : Penegasan bahwa memori tersebut telah diaplikasikan ke dalam konteks obrolan saat ini, atau pertanyaan apakah data tersebut masih relevan.
+
+4. System Control & Automation (Tier 1 Tools)
+Digunakan saat mengeksekusi tool yang berinteraksi dengan OS lokal atau API eksternal non-AI.
+- Header : Status aksi secara langsung.
+- Body : Laporan spesifik mengenai action yang diambil oleh skrip backend.
+- Footer : Tawaran bantuan lanjutan yang relevan dengan eksekusi tersebut.
+
+5. General Chat (Pure Conversation)
+Digunakan saat menjawab sapaan, berdiskusi santai, menjawab teori umum, atau memberikan opini murni.
+- Body : Respons natural, berempati, dan langsung menjawab ke intinya. Gunakan paragraf biasa untuk kenyamanan membaca.
+- Footer : Pertanyaan balasan yang relevan untuk menjaga alur percakapan agar tetap interaktif.
+
+6. Email Management (IMAP / SMTP)
+Digunakan saat Anda membaca kotak masuk (Inbox), merangkum email, atau menyiapkan draf balasan email.
+- Header : Tuliskan konteks email.
+- Body (Metadata & Isi) : Gunakan bullet points untuk Pengirim, Subjek, dan Tanggal. WAJIB gunakan format kutipan blok (Blockquote >) untuk isi/cuplikan pesan email agar UI dapat merendernya sebagai kotak surat/amplop.
+- Footer : Pertanyaan tindakan (Call-to-Action).
+
+7. Media & YouTube
+Digunakan saat Anda berhasil mencari video YouTube, memutar musik, atau merangkum isi video.
+- Image : WAJIB menyertakan thumbnail video menggunakan meta tag dari YouTube hasil pencarian.
+- Header : Judul video atau lagu yang ditemukan.
+- Body : Gunakan bullet points untuk menyajikan metadata singkat. Jika diminta merangkum, letakkan ringkasan video di bawah metadata.
+- Footer : Konfirmasi aksi eksekusi.
+
+8. File System & Workspace
+Digunakan saat Anda membaca direktori lokal, merangkum dokumen PDF/Word, atau membuat file baru di laptop.
+- Header : Status operasi file.
+- Body : Jika menampilkan daftar file, gunakan struktur hirarki bullet points. Jika menampilkan isi file/teks, sajikan dalam paragraf biasa.
+- Footer : Kesimpulan isi dokumen atau konfirmasi bahwa file berhasil dibuat/disimpan.
+
+9. Calendar, Task, & Reminders
+Digunakan saat Anda diminta mengatur alarm, jadwal, atau to-do list harian.
+- Header : Pernyataan pengaturan jadwal.
+- Body : Gunakan format checklist Markdown (- [ ] atau - [x]) untuk menampilkan daftar tugas atau rentetan jadwal berdasarkan jam agar UI dapat merendernya sebagai Checkbox interaktif.
+- Footer : Penegasan batas waktu terdekat atau sisa waktu menuju jadwal pertama.`;
 
 /**
  * TOOL_EXAMPLES: Map contoh per nama tool untuk generate few-shot secara dinamis.
@@ -159,7 +213,7 @@ Assistant: {"tool": "take_screenshot", "query": ""}
 User: "tangkap layar 2"
 Assistant: {"tool": "take_screenshot", "query": "layar 2"}`,
 
-check_email: `✅ (cek email tanpa sebut provider, default gmail):
+    check_email: `✅ (cek email tanpa sebut provider, default gmail):
 User: "cek email saya"
 Assistant: {"tool": "check_email", "query": ""}
 
@@ -269,4 +323,4 @@ function buildSystemPrompt(relevantTools, conversationContext = '') {
     return parts.filter(p => p !== '').join('\n\n');
 }
 
-module.exports = { buildSystemPrompt, buildToolsSection, buildFewShotExamples, PERSONA };
+module.exports = { buildSystemPrompt, buildToolsSection, buildFewShotExamples, PERSONA, GENERAL_ANSWER_RULES };
