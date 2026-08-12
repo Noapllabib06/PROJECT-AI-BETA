@@ -1,123 +1,65 @@
-# 🤖 Jarvis AI - User Manual
-**Sistem Asisten AI Lokal dengan Memori Jangka Panjang (RAG)**
+# JARVIS AI - Panduan Pengguna
 
-Jarvis adalah asisten kecerdasan buatan pribadi yang berjalan sepenuhnya secara lokal. Jarvis menggabungkan fleksibilitas **Node.js/Electron** untuk antarmuka dan manajemen alat, dengan kekuatan **Python FastAPI** untuk sistem memori berbasis vektor (RAG).
+Dokumentasi arsitektur dan panduan teknis operasional.
 
----
+## Arsitektur Sistem
 
-## 🏗️ Arsitektur Sistem
+Sistem beroperasi melalui dua komponen utama:
+- **Frontend & Agent Engine (Node.js/Electron):** Menangani antarmuka, manajemen proses, dan routing logika LLM.
+- **Memory Server (Python FastAPI):** Menangani Retrieval-Augmented Generation (RAG) untuk penyimpanan dan pencarian vektor.
 
-Jarvis menggunakan **Arsitektur Hybrid**:
-- **Frontend & Agent Engine (Node.js/Electron):** Menangani antarmuka pengguna, manajemen jendela, dan routing logika AI menggunakan model LLM lokal via Ollama.
-- **Memory Server (Python FastAPI):** Bertindak sebagai "Otak Memori" yang menggunakan teknik *Retrieval-Augmented Generation* (RAG) untuk menyimpan dan mengambil dokumen teks secara efisien.
+### Struktur Direktori
 
-### 📂 Struktur Proyek
 ```text
 project-root/
 ├── src/
-│   ├── engine/        # Logika utama Agent, Prompt, dan Context Manager
+│   ├── engine/        # Logika Agent, Prompt, dan Context Manager
 │   ├── gui/           # Antarmuka pengguna (HTML/CSS/JS)
-│   ├── tools/         # Kumpulan tools (Web, YouTube, File System)
-│   ├── utils/         # Utility seperti Logger dan Credential Manager
-│   ├── main.js        # Entry point utama Electron (Main Process)
-│   └── preload.js     # Jembatan keamanan antara Main dan Renderer process
-├── local_memory.py    # Server FastAPI untuk Memori Vektor RAG
+│   ├── tools/         # Modul aksi eksternal (Web, Sistem, File)
+│   ├── utils/         # Modul utilitas (Logger, Credential Manager)
+│   ├── main.js        # Entry point Electron
+│   └── preload.js     # Script isolasi IPC
+├── local_memory.py    # Server FastAPI (RAG)
 ├── package.json       # Konfigurasi dependensi Node.js
-├── text_metadata.pkl  # Database penyimpanan teks asli (Persistence)
-└── test_rag.py        # Skrip pengujian integritas sistem memori
+├── text_metadata.pkl  # Penyimpanan data teks
+└── test_rag.py        # Skrip pengujian memori
 ```
 
----
+## Persyaratan Lingkungan
 
-## 🛠️ Prasyarat & Instalasi
+- Node.js LTS
+- Python 3.10+
+- Ollama aktif dengan model `qwen2.5:7b`
 
-### 1. Perangkat Lunak Dasar
-Pastikan Anda telah menginstal:
-- **Node.js** (Versi terbaru LTS direkomendasikan)
-- **Python 3.10+**
-- **Ollama** (Untuk menjalankan LLM secara lokal)
+### Setup Dependensi Python Khusus RAG
 
-### 2. Instalasi Model AI
-Jarvis menggunakan model **Qwen 2.5 (7B)**. Buka terminal Anda dan jalankan:
-```bash
-ollama run qwen2.5:7b
-```
-
-### 3. Instalasi Dependensi
-
-#### **Node.js (Frontend & Agent)**
-Buka terminal di root proyek dan jalankan:
-```bash
-npm install
-```
-
-#### **Python (Memory Server)**
-Disarankan menggunakan Virtual Environment agar tidak terjadi konflik library:
 ```powershell
-# Membuat virtual environment
 python -m venv .venv
-
-# Mengaktifkan virtual environment (Windows)
 .\.venv\Scripts\Activate.ps1
-
-# Instalasi library RAG
 pip install numpy sentence-transformers turbovec fastapi uvicorn pydantic
 ```
 
----
+## Prosedur Eksekusi
 
-## 🚀 Cara Menjalankan Proyek
-
-Sistem ini terdiri dari dua komponen yang harus berjalan bersamaan.
-
-### Metode A: Otomatis (Recommended)
-Jika proyek sudah dikonfigurasi dengan `concurrently` di `package.json`, Anda cukup menjalankan:
+**Metode Simultan:**
+Jalankan perintah berikut di root direktori untuk memulai server Python dan Electron secara bersamaan:
 ```bash
 npm run dev
 ```
 
-### Metode B: Manual (Jika ingin monitoring terpisah)
-1. **Jalankan Server Memori (Terminal 1):**
-   ```powershell
-   .\Pvenv\Scripts\python.exe local_memory.py
-   ```
-   *Pastikan muncul pesan: `🚀 Local Memory Service berjalan di http://localhost:8000`*
+**Metode Terpisah:**
+1. Server Memori (Terminal 1): `.\.venv\Scripts\python.exe local_memory.py`
+2. Aplikasi Utama (Terminal 2): `npm start`
 
-2. **Jalankan Aplikasi Jarvis (Terminal 2):**
-   ```bash
-   npm start
-   ```
+## Daftar Modul Fungsional
 
----
+- **Web & Media:** Pencarian web, ekstraksi data web, otomatisasi browser.
+- **Sistem & File:** Manipulasi file lokal (baca/tulis), navigasi direktori.
+- **Memori (RAG):** Ekstraksi teks, embedding (`all-MiniLM-L6-v2`), kompresi vektor, dan semantic search.
+- **Kredensial:** Manajemen penyimpanan kredensial tersandi secara lokal.
 
-## 🌟 Kapabilitas & Fitur
+## Pemecahan Masalah
 
-### 🌐 Web & Media Tools (`src/tools/`)
-- **Pencarian Web**: Mencari informasi terbaru menggunakan Yahoo Search (anti-block).
-- **Web Scraping**: Membaca dan merangkum konten dari URL tertentu.
-- **Kontrol YouTube**: Memutar lagu, video, dan mencari konten YouTube secara otomatis.
-- **Navigasi Cepat**: Membuka situs populer (Google, GitHub, dll) dengan perintah sederhana.
-
-### 📄 Manajemen File
-- **Create File**: Membuat catatan teks langsung ke komputer pengguna.
-- **Read File**: Membaca isi file lokal untuk dianalisis oleh AI.
-
-### 🧠 Memori Jangka Panjang (RAG)
-Fitur unggulan yang memungkinkan Jarvis "mengingat" informasi secara permanen:
-- **Embedding**: Menggunakan model `all-MiniLM-L6-v2` untuk mengubah teks menjadi vektor dimensi 384.
-- **TurboQuant Index**: Implementasi kompresi vektor **2-bit** via `turbovec` untuk pencarian super cepat dengan penggunaan RAM yang sangat rendah.
-- **Semantic Search**: Mencari informasi berdasarkan "makna", bukan sekadar kata kunci.
-
----
-
-## ⚠️ Limitasi & Troubleshooting
-
-| Masalah | Penyebab | Solusi |
-| :--- | :--- | :--- |
-| **Gagal Menjalankan `search_knowledge`** | Server Python `local_memory.py` belum berjalan. | Jalankan `python local_memory.py` di terminal terpisah. |
-| **Respon AI Lambat** | Keterbatasan VRAM/RAM pada hardware lokal. | Gunakan model Ollama yang lebih kecil atau tingkatkan alokasi RAM. |
-| **Teks Karakter Aneh (Emoji Crash)** | Terminal Windows tidak mendukung encoding UTF-8. | Gunakan terminal modern seperti **Windows Terminal** atau **VS Code Integrated Terminal**. |
-| **AI Menolak Menyimpan Data** | Guardrails keamanan terhadap kata kunci sensitif. | Hindari menyimpan kata kunci seperti "password" atau "private key" secara gamblang. |
-
----
-*Dibuat oleh Naufal untuk Project Jarvis AI.*
+- **Gagal eksekusi `search_knowledge`:** Layanan `local_memory.py` belum berjalan di port 8000.
+- **Waktu respon lambat:** Penurunan performa akibat spesifikasi RAM tidak memadai atau beban VRAM.
+- **Karakter tidak terbaca/crash:** Terminal tidak mendukung output UTF-8.
