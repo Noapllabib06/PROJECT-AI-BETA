@@ -20,6 +20,19 @@ contextBridge.exposeInMainWorld('jarvis', {
     onStatusUpdate: (callback) => {
         ipcRenderer.on('status-update', (event, data) => callback(data));
     },
+
+    // ==================== THINKING PROCESS (BARU) ====================
+
+    /**
+     * Listener untuk event trace/thinking process.
+     * Setiap event berbentuk: { type, timestamp, ...detail }
+     * type bisa: 'routing', 'tool_call', 'tool_result', 'retry',
+     * 'stale_knowledge_override', 'synthesis_start', 'chat_response',
+     * 'done', 'error', 'final_fallback'
+     */
+    onTraceUpdate: (callback) => {
+        ipcRenderer.on('trace-update', (event, traceStep) => callback(traceStep));
+    },
     
     // ==================== WEB TOOLS ====================
     
@@ -53,6 +66,28 @@ contextBridge.exposeInMainWorld('jarvis', {
     
     /** Update status agent */
     updateAgentState: (newState) => ipcRenderer.invoke('update-agent-state', newState),
+
+    // ==================== CHAT HISTORY / CONVERSATIONS (BARU) ====================
+
+    /** Ambil daftar semua percakapan (metadata ringan: id, title, timestamp) */
+    listConversations: () => ipcRenderer.invoke('list-conversations'),
+
+    /** Buat percakapan baru, return objek percakapan (kosong) */
+    createConversation: () => ipcRenderer.invoke('create-conversation'),
+
+    /** Load satu percakapan penuh (termasuk semua messages) berdasarkan id */
+    loadConversation: (conversationId) => ipcRenderer.invoke('load-conversation', conversationId),
+
+    /** Hapus percakapan berdasarkan id */
+    deleteConversation: (conversationId) => ipcRenderer.invoke('delete-conversation', conversationId),
+
+    /** Beralih ke percakapan tertentu sebagai percakapan aktif di agent */
+    switchConversation: (conversationId) => ipcRenderer.invoke('switch-conversation', conversationId),
+
+    // ==================== FILE PREVIEW / CONFIRM-SAVE (BARU) ====================
+
+    /** Konfirmasi simpan draft file dari Code Preview pane ke Desktop */
+    confirmSaveFile: (payload) => ipcRenderer.invoke('confirm-save-file', payload),
     
     // ==================== WINDOW CONTROLS ====================
     

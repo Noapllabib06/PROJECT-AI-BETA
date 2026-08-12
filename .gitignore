@@ -51,3 +51,5 @@ text_metadata.pkl
 *.index
 *.bin
 src/engine/memory/facts.json
+memory_docs.pkl
+memory_index.bin

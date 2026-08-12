@@ -47,16 +47,39 @@ const TOOL_DECISION_RULES = `📋 **ATURAN PENGGUNAAN TOOL (WAJIB):**
 19. Jika pengguna meminta "cari tutorial" atau "cari panduan", gunakan search_youtube, bukan search_web.
 20. Jika pengguna meminta "cari file" atau "cari dokumen", gunakan search_web, bukan read_file.
 21. Jika pengguna meminta "cari musik" atau "cari lagu", gunakan search_youtube, bukan play_music.
-22. Jika pengguna meminta "cari video" atau "cari film", gunakan search_youtube, bukan play_video.`;
+22. Jika pengguna meminta "cari video" atau "cari film", gunakan search_youtube, bukan play_video.
+23. Jika pengguna minta buka APLIKASI DESKTOP lokal (bukan situs web) seperti
+    kalkulator, notepad, spotify (aplikasi desktop), discord (aplikasi desktop),
+    vscode, task manager, dll — gunakan open_app, BUKAN open_website.
+    open_website HANYA untuk membuka SITUS WEB di browser.
+24. Jika pengguna minta atur/naikkan/turunkan/mute volume suara sistem,
+    gunakan control_volume, bukan tool lain.
+25. Jika pengguna meminta "ambil foto", "ambil tangkapan layar", "screenshot", 
+    "foto", atau "capture layar", gunakan take_screenshot. Ini akan mengambil gambar layar
+    dan menyimpannya ke Desktop sebagai file PNG. Jangan gunakan tool lain untuk tugas ini.
+26. Jika pengguna minta cek email/inbox/gmail (misal "cek email", "ada email baru?",
+    "cek gmail saya", "cek email outlook", "cek yahoo"), gunakan check_email. Jika user menyebutkan provider selain
+    gmail (outlook, yahoo, dll), isi query dengan nama provider tersebut.
+    Jika tidak disebutkan provider, kosongkan query (default ke gmail).
+27. Jika pengguna minta simpan KREDENSIAL/PASSWORD/LOGIN (ada kata "password",
+    "kredensial", "login", "akun", "kata sandi"), WAJIB gunakan save_credential,
+    JANGAN PERNAH gunakan save_memory untuk data seperti ini — save_memory
+    menyimpan teks tanpa enkripsi.
+28. save_memory HANYA untuk fakta umum non-sensitif (preferensi, nama, hobi,
+    info kontekstual). Jika ragu apakah data bersifat rahasia/kredensial,
+    pilih save_credential.`;   
 
 /**
- * WEB_ANSWER_RULES: Instruksi khusus setelah tool search_web / read_webpage dieksekusi.
+ * GENERAL_ANSWER_RULES: Instruksi khusus untuk format jawaban.
  */
-const WEB_ANSWER_RULES = `⚠️ **ATURAN MENJAWAB HASIL PENCARIAN WEB:**
-1. Saat tool 'search_web' atau 'read_webpage' selesai dan mengembalikan hasil, rangkum 3-4 poin informasi paling penting.
-2. Jangan berikan jawaban mentah atau terlalu panjang.
-3. WAJIB sertakan tautan sumber di akhir: [Sumber: Judul](URL).
-4. Jawaban harus rapi, mudah dibaca sekilas, dan langsung menjawab inti pertanyaan.`;
+const GENERAL_ANSWER_RULES = `⚠️ **ATURAN MENJAWAB (BERLAKU UNTUK SEMUA JAWABAN INFORMASIONAL / PENCARIAN):**
+Saat memberikan informasi (baik dari web maupun ingatan Anda), WAJIB gunakan struktur berikut:
+
+**Header**: Penjelasan singkat terkait topik yang dibahas.
+**Body**: Isi utama (link, list, lokasi, harga, dll). Jika topik terkait harga, WAJIB sertakan analisis rata-rata harga (Lowest, Mid, Highest).
+**Footer**: Kesimpulan dari topik tersebut.
+
+Jawaban harus rapi, gunakan Markdown (bold, bullet points), dan langsung menjawab inti pertanyaan. Jika ada referensi web, sertakan link di Body.`;
 
 /**
  * TOOL_EXAMPLES: Map contoh per nama tool untuk generate few-shot secara dinamis.
@@ -67,7 +90,18 @@ User: "apa makanan kesukaan saya yang kemarin kubilang?"
 Assistant: {"tool": "search_memory", "query": "makanan kesukaan"}`,
     save_memory: `✅ (simpan ingatan / fakta):
 User: "tolong ingat kalau makanan kesukaan saya ayam goreng"
-Assistant: {"tool": "save_memory", "query": "makanan kesukaan saya ayam goreng"}`,
+Assistant: {"tool": "save_memory", "query": "makanan kesukaan saya ayam goreng"}
+
+❌ (JANGAN simpan password/kredensial pakai save_memory):
+User: "simpan kredensial gmail, username x@gmail.com, password xxxx"
+Assistant: {"tool": "save_memory", "query": "..."}  // SALAH — harus save_credential!`,
+
+    save_credential: `✅ (simpan kredensial / password / login):
+User: "simpan password fb saya: 123456"  
+Assistant: {"tool": "save_credential", "query": "facebook: 123456"}
+
+User: "buat catatan password email saya"  
+Assistant: {"tool": "save_credential", "query": "email: [PASSWORD]"}`,
     search_web: `✅ (cari info real-time):
 User: "cari berita teknologi terbaru"
 Assistant: {"tool": "search_web", "query": "berita teknologi terbaru"}`,
@@ -110,7 +144,32 @@ User: "cari cuaca jakarta lalu putar lagu jazz"
 Assistant: [{"tool": "search_web", "query": "cuaca jakarta hari ini"}, {"tool": "play_music", "query": "jazz"}]`,
     factual_search: `✅ (cari lokasi/fakta spesifik):
 User: "Bisa berikan lokasi Institut Teknologi Telkom Purwokerto?"
-Assistant: [{"tool": "search_web", "query": "lokasi Institut Teknologi Telkom Purwokerto"}]`
+Assistant: [{"tool": "search_web", "query": "lokasi Institut Teknologi Telkom Purwokerto"}] `,
+    open_app: `✅ (buka aplikasi desktop lokal):
+User: "buka kalkulator"
+Assistant: {"tool": "open_app", "query": "kalkulator"}`,
+    control_volume: `✅ (atur volume sistem):
+User: "naikkan volume"
+Assistant: {"tool": "control_volume", "query": "naikkan volume"}`,
+    take_screenshot: `✅ (ambil screenshot layar):
+User: "screenshot layar saya"
+Assistant: {"tool": "take_screenshot", "query": ""}
+
+✅ (contoh multi-monitor):
+User: "tangkap layar 2"
+Assistant: {"tool": "take_screenshot", "query": "layar 2"}`,
+
+check_email: `✅ (cek email tanpa sebut provider, default gmail):
+User: "cek email saya"
+Assistant: {"tool": "check_email", "query": ""}
+
+✅ (cek email dengan provider spesifik):
+User: "ada email baru di outlook?"
+Assistant: {"tool": "check_email", "query": "outlook"}
+
+❌ (jangan pakai search_web untuk cek email pribadi):
+User: "cek gmail saya"
+Assistant: {"tool": "search_web", "query": "gmail"}  // SALAH — ini bukan pencarian web`,
 };
 
 /**
@@ -188,14 +247,11 @@ function buildSystemPrompt(relevantTools, conversationContext = '') {
 
     const toolsSection = buildToolsSection(relevantTools);
     const fewShotSection = buildFewShotExamples(relevantTools);
-    const toolNames = (relevantTools || []).map(t => (t.function || t).name);
-    const hasWebTool = toolNames.includes('search_web') || toolNames.includes('read_webpage');
-    const webAnswerRulesSection = hasWebTool ? WEB_ANSWER_RULES : '';
     
     let facts = memory_manager.getFacts();
     let factsSection = '';
     if (facts.length > 0) {
-        factsSection = `👤 **FAKTA TENTANG PENGGUNA:**\n${facts.map(f => `- ${f}`).join('\n')}`;
+        factsSection = `💡 **FAKTA TENTANG PENGGUNA:**\n${facts.map(f => `- ${f}`).join('\n')}`;
     }
 
     const parts = [
@@ -206,8 +262,8 @@ function buildSystemPrompt(relevantTools, conversationContext = '') {
         TOOL_DECISION_RULES,
         toolsSection,
         fewShotSection,
-        webAnswerRulesSection,
-        '⚠️ **DILARANG KERAS:** Menambahkan teks, markdown, awalan, akhiran, atau penjelasan di luar format JSON. HANYA output JSON valid.'
+        GENERAL_ANSWER_RULES,
+        '⛔ **DILARANG KERAS:** Menambahkan teks, markdown, awalan, akhiran, atau penjelasan di luar format JSON. HANYA output JSON valid.'
     ];
 
     return parts.filter(p => p !== '').join('\n\n');

@@ -20,8 +20,13 @@
     "cheerio": "^1.2.0",
     "duck-duck-scrape": "^2.2.7",
     "googlethis": "^1.8.0",
+    "imap-simple": "^5.1.0",
     "langchain": "^1.5.3",
-    "play-dl": "^1.9.7"
+    "loudness": "^0.4.2",
+    "mailparser": "^3.9.14",
+    "marked": "^18.0.9",
+    "play-dl": "^1.9.7",
+    "screenshot-desktop": "^1.15.4"
   },
   "devDependencies": {
     "concurrently": "^10.0.4"

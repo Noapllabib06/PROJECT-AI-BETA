@@ -8,71 +8,132 @@
 </head>
 <body>
     <!-- Title Bar -->
-    <div class="title-bar" id="titleBar">
+    <header class="title-bar" id="titleBar">
         <div class="title-bar-drag">
-            <div class="app-logo">
-                <span class="logo-icon">◈</span>
-                <span class="logo-text">J.A.R.V.I.S</span>
-            </div>
+            <div class="logo-mark">J</div>
+            <span class="logo-text">Jarvis</span>
         </div>
         <div class="title-bar-controls">
-            <button class="control-btn minimize" id="minimizeBtn" title="Minimize">─</button>
-            <button class="control-btn maximize" id="maximizeBtn" title="Maximize">□</button>
-            <button class="control-btn close" id="closeBtn" title="Close">✕</button>
+            <button class="control-btn" id="minimizeBtn" title="Minimize">─</button>
+            <button class="control-btn" id="maximizeBtn" title="Maximize">□</button>
+            <button class="control-btn control-close" id="closeBtn" title="Close">✕</button>
         </div>
-    </div>
+    </header>
 
-    <!-- Main Container -->
-    <div class="container">
-        <!-- Canvas Background -->
-        <canvas id="cyberCanvas"></canvas>
-
-        <!-- AI Avatar / Orb -->
-        <div class="ai-orb-container">
-            <div class="ai-orb" id="aiOrb">
-                <div class="orb-ring"></div>
-                <div class="orb-core"></div>
+    <div class="app-body">
+        <!-- Sidebar: Chat History -->
+        <aside class="sidebar" id="sidebar">
+            <div class="sidebar-top">
+                <button class="new-chat-btn" id="newChatBtn">
+                    <span class="icon-plus">+</span>
+                    <span class="sidebar-text">Percakapan Baru</span>
+                </button>
+                <button class="toggle-sidebar-btn" id="toggle-sidebar-btn" title="Ciutkan sidebar">‹</button>
             </div>
-        </div>
+            <div class="sidebar-section-label sidebar-text">Riwayat</div>
+            <nav class="conversation-list" id="conversationList">
+                <div class="conversation-empty sidebar-text" id="conversationEmptyState">Belum ada percakapan.</div>
+            </nav>
+            <div class="sidebar-bottom">
+                <button class="settings-btn" id="settingsBtn">
+                    <span class="icon-settings">⚙</span>
+                    <span class="sidebar-text">Pengaturan</span>
+                </button>
+            </div>
+        </aside>
 
-        <!-- Chat Area -->
-        <div class="chat-area">
+        <!-- Main Chat Column -->
+        <main class="chat-area">
             <div class="chat-header">
                 <div class="status-indicator" id="statusIndicator">
                     <span class="status-dot"></span>
-                    <span class="status-text" id="statusText">Menunggu perintah...</span>
+                    <span class="status-text" id="statusText">Ready</span>
                 </div>
-                <div class="model-info">Qwen 2.5 (Lokal)</div>
+                <div class="model-info">Qwen 2.5 · Local</div>
             </div>
 
-            <div class="chat-messages" id="chatMessages">
-                <div class="message ai-message">
-                    <div class="message-icon">◈</div>
-                    <div class="message-content">
-                        <p>Halo! Saya Jarvis, asisten AI pribadi Anda. Ada yang bisa saya bantu?</p>
-                    </div>
+            <div class="chat-messages-outer">
+                <div class="chat-messages" id="chatMessages">
+                    <!-- Pesan disuntikkan dinamis oleh ui_handler.js -->
                 </div>
             </div>
 
             <div class="chat-input-area">
-                <!-- Preview Image Zone -->
-                <div id="imagePreviewContainer" class="image-preview-container" style="display: none;">
-                    <img id="imagePreview" class="image-preview" src="" alt="Preview">
-                    <button id="removeImageBtn" class="remove-image-btn" title="Hapus Gambar">✕</button>
-                </div>
-                <div class="input-wrapper">
-                    <button class="attach-btn" id="attachBtn" title="Lampirkan Gambar">📎</button>
-                    <input type="file" id="imageInput" accept="image/*" style="display: none;">
+                <div class="chat-input-inner">
+                    <div id="imagePreviewContainer" class="image-preview-container hidden">
+                        <img id="imagePreview" class="image-preview" src="" alt="Preview">
+                        <button id="removeImageBtn" class="remove-image-btn" title="Hapus Gambar">✕</button>
+                    </div>
 
-                    <input type="text" id="userInput" class="chat-input" placeholder="Ketik perintah Anda..." autofocus>
-                    <button class="voice-btn" id="voiceBtn" title="Voice Input">🎤</button>
-                    <button class="send-btn" id="sendBtn" title="Send">
-                        <span class="send-icon">→</span>
-                    </button>
+                    <div class="input-wrapper">
+                        <button class="attach-btn" id="attachBtn" title="Lampirkan Gambar">📎</button>
+                        <input type="file" id="imageInput" accept="image/*" class="hidden">
+
+                        <input type="text" id="userInput" class="chat-input" placeholder="Ketik perintah Anda..." autofocus>
+
+                        <button class="voice-btn" id="voiceBtn" title="Voice Input">🎤</button>
+                        <button class="send-btn" id="sendBtn" title="Send">↑</button>
+                    </div>
+                </div>
+            </div>
+        </main>
+
+        <!-- Code Preview Pane — placeholder, belum terhubung ke fitur manapun.
+             Struktur dipertahankan sesuai desain, collapsed default sampai
+             diputuskan mau dipakai untuk apa (misal preview file yang
+             dibuat lewat tool create_file). -->
+        <aside class="code-sidebar collapsed" id="code-sidebar">
+            <div class="code-header">
+                <span class="code-header-text sidebar-text" id="codeFileName">Code Preview</span>
+                <div class="code-header-actions">
+                    <button class="toggle-code-btn" id="toggle-code-btn" title="Toggle Code Preview">‹</button>
+                </div>
+            </div>
+            <div class="code-content">
+                <div class="code-content-inner" id="codeContentInner">
+                    <div class="code-placeholder" id="codePlaceholder">
+                        Belum ada konten untuk ditampilkan di sini.
+                    </div>
+                </div>
+            </div>
+        </aside>
+    </div>
+
+    <!-- Template pesan (dipakai lewat JS .cloneNode) -->
+    <template id="aiMessageTemplate">
+        <div class="ai-message-wrapper">
+            <div class="thinking-panel">
+                <div class="thinking-header">
+                    <span class="thinking-icon">◆</span>
+                    <span class="thinking-label">Memproses...</span>
+                    <span class="chevron">⌄</span>
+                </div>
+                <div class="thinking-body"></div>
+            </div>
+            <div class="message ai-message">
+                <div class="message-icon">J</div>
+                <div class="message-content message-bubble">
+                    <p class="message-text"><span class="typing-dots"><span></span><span></span><span></span></span></p>
                 </div>
             </div>
         </div>
-    </div>
+    </template>
+
+    <template id="userMessageTemplate">
+        <div class="message user-message">
+            <div class="message-content">
+                <p class="message-text"></p>
+            </div>
+        </div>
+    </template>
+
+    <template id="conversationItemTemplate">
+        <a class="conv-item" href="#">
+            <span class="conv-icon">💬</span>
+            <span class="conv-title sidebar-text"></span>
+            <button class="conv-delete-btn" title="Hapus">🗑</button>
+        </a>
+    </template>
 
     <script src="ui_handler.js"></script>
 </body>

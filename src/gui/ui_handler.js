@@ -1,436 +1,534 @@
-// src/gui/ui_handler.js
-// Logika frontend untuk UI Jarvis - Universal AI Agent
-
-document.addEventListener('DOMContentLoaded', () => {
-    // DOM Elements
-    const chatMessages = document.getElementById('chatMessages');
-    const userInput = document.getElementById('userInput');
-    const sendBtn = document.getElementById('sendBtn');
-    const voiceBtn = document.getElementById('voiceBtn');
-    const statusText = document.getElementById('statusText');
-    const statusDot = document.querySelector('.status-dot');
-    const aiOrb = document.getElementById('aiOrb');
-    const cyberCanvas = document.getElementById('cyberCanvas');
-
-    // Image Attachment Elements
-    const attachBtn = document.getElementById('attachBtn');
-    const imageInput = document.getElementById('imageInput');
-    const imagePreviewContainer = document.getElementById('imagePreviewContainer');
-    const imagePreview = document.getElementById('imagePreview');
-    const removeImageBtn = document.getElementById('removeImageBtn');
-    
-    let currentImageBase64 = null;
-
-    // ============ TITLE BAR CONTROLS ============
-    document.getElementById('minimizeBtn').addEventListener('click', () => {
-        if (window.jarvis) window.jarvis.minimizeWindow();
-    });
-
-    document.getElementById('maximizeBtn').addEventListener('click', () => {
-        if (window.jarvis) window.jarvis.maximizeWindow();
-    });
-
-    document.getElementById('closeBtn').addEventListener('click', () => {
-        if (window.jarvis) window.jarvis.closeWindow();
-    });
-
-    // ============ STATUS UPDATE LISTENER ============
-    if (window.jarvis) {
-        window.jarvis.onStatusUpdate((data) => {
-            setStatus(data.text, data.state);
-        });
-        
-        // Tandai window siap
-        window.jarvis.windowReady();
-    }
-
-    // ============ IMAGE HANDLING ============
-    if (attachBtn) {
-        attachBtn.addEventListener('click', () => {
-            imageInput.click();
-        });
-    }
-
-    if (imageInput) {
-        imageInput.addEventListener('change', (e) => {
-            const file = e.target.files[0];
-            if (!file) return;
-
-            const reader = new FileReader();
-            reader.onload = (event) => {
-                // Get the base64 string without the prefix
-                currentImageBase64 = event.target.result;
-                imagePreview.src = currentImageBase64;
-                imagePreviewContainer.style.display = 'flex';
-            };
-            reader.readAsDataURL(file);
-        });
-    }
-
-    if (removeImageBtn) {
-        removeImageBtn.addEventListener('click', () => {
-            clearAttachment();
-        });
-    }
-
-    function clearAttachment() {
-        currentImageBase64 = null;
-        imagePreviewContainer.style.display = 'none';
-        imagePreview.src = '';
-        if (imageInput) imageInput.value = '';
-    }
-
-    // ============ SEND MESSAGE ============
-    async function sendMessage() {
-        const messageText = userInput.value.trim();
-        if (!messageText && !currentImageBase64) return;
-
-        const payload = {
-            text: messageText,
-            image: currentImageBase64 ? currentImageBase64.split(',')[1] : null // Send only base64 data to backend
-        };
-
-        // Clear input
-        userInput.value = '';
-        const sentImage = currentImageBase64;
-        clearAttachment();
-
-        // Add user message to chat
-        addMessage(messageText, 'user', sentImage);
-
-        // Set status to thinking
-        setStatus('Memproses...', 'thinking');
-
-        try {
-            let fullResponse = '';
-
-            if (window.jarvis) {
-                // Listen for stream tokens
-                window.jarvis.onStreamToken((token) => {
-                    fullResponse += token;
-                    updateLastAiMessage(fullResponse);
-                });
-
-                // Send command with streaming
-                const result = await window.jarvis.sendCommandStream(payload);
-                
-                if (!result.success) {
-                    addMessage(result.response || '❌ Maaf, terjadi kesalahan.', 'ai');
-                }
-            } else {
-                // Fallback for non-Electron environment
-                const response = await simulateAIResponse(message);
-                addMessage(response, 'ai');
-            }
-        } catch (error) {
-            console.error('Error:', error);
-            addMessage('❌ Maaf, terjadi kesalahan komunikasi dengan AI.', 'ai');
-        }
-
-        // Set status back to idle
-        setStatus('Menunggu perintah...', 'idle');
-        scrollToBottom();
-    }
-
-    // Event listeners for send
-    sendBtn.addEventListener('click', sendMessage);
-    userInput.addEventListener('keydown', (e) => {
-        if (e.key === 'Enter') sendMessage();
-    });
-
-    // ============ VOICE INPUT ============
-    voiceBtn.addEventListener('click', () => {
-        if (!('webkitSpeechRecognition' in window) && !('SpeechRecognition' in window)) {
-            addMessage('❌ Maaf, browser Anda tidak mendukung voice input.', 'ai');
-            return;
-        }
-
-        const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
-        const recognition = new SpeechRecognition();
-        recognition.lang = 'id-ID';
-        recognition.interimResults = false;
-
-        setStatus('Mendengarkan...', 'listening');
-        aiOrb.classList.add('listening');
-
-        recognition.onresult = (event) => {
-            const transcript = event.results[0][0].transcript;
-            userInput.value = transcript;
-            sendMessage();
-        };
-
-        recognition.onerror = (event) => {
-            console.error('Voice error:', event.error);
-            setStatus('Menunggu perintah...', 'idle');
-            aiOrb.classList.remove('listening');
-        };
-
-        recognition.onend = () => {
-            setStatus('Menunggu perintah...', 'idle');
-            aiOrb.classList.remove('listening');
-        };
-
-        recognition.start();
-    });
-
-    // ============ ADD MESSAGE TO CHAT ============
-    function addMessage(text, type, imageSrc = null) {
-        const messageDiv = document.createElement('div');
-        messageDiv.className = `message ${type}-message`;
-        messageDiv.dataset.timestamp = Date.now();
-
-        const icon = document.createElement('div');
-        icon.className = 'message-icon';
-        icon.textContent = type === 'user' ? '👤' : '◈';
-
-        const content = document.createElement('div');
-        content.className = 'message-content';
-        
-        if (imageSrc) {
-            const img = document.createElement('img');
-            img.src = imageSrc;
-            img.style.maxWidth = '100%';
-            img.style.borderRadius = '8px';
-            img.style.marginBottom = '8px';
-            content.appendChild(img);
-        }
-
-        if (text) {
-            const textDiv = document.createElement('div');
-            // Format rich text: detect URLs and emojis
-            textDiv.innerHTML = formatMessage(text);
-            content.appendChild(textDiv);
-        }
-
-        messageDiv.appendChild(icon);
-        messageDiv.appendChild(content);
-        chatMessages.appendChild(messageDiv);
-
-        scrollToBottom();
-        return messageDiv;
-    }
-
-    // ============ HTML ESCAPE (Cegah XSS) ============
-    function escapeHTML(text) {
-        var charMap = {
-            '&': '&',
-            '<': '<',
-            '>': '>',
-            '"': '"',
-            "'": '&#039;'
-        };
-        return text.replace(/[&<>"']/g, function(m) { return charMap[m]; });
-    }
-
-    // ============ FORMAT MESSAGE (Rich Text, AMAN dari XSS) ============
-    // PENTING: Urutan parsing harus benar untuk mencegah Greedy Regex
-    // 1. Escape HTML (cegah XSS)
-    // 2. Parse Markdown link [teks](url) SEBELUM raw URL agar tanda kurung
-    //    sintaks markdown tidak ikut terbawa ke dalam URL.
-    // 3. Parse raw URL dengan regex terbatas sehingga karakter penutup
-    //    seperti ) ] , . " ' tidak ikut terambil.
-    // 4. Inline code & bold (Markdown sederhana)
-    // 5. Baris baru
-    function formatMessage(text) {
-        if (!text) return '';
-
-        // 1. Escape HTML dasar (cegah XSS) — escape dulu sebelum transform lain
-        let html = escapeHTML(text);
-
-        // 2. PARSE MARKDOWN LINKS: [teks](url) -> <a href="url">teks</a>
-        //    Pola [teks](url) diproses lebih dulu agar tanda ')' dari sintaks
-        //    markdown tidak ikut tertangkap oleh parser raw URL di langkah 3.
-        //    URL pada pola ini sudah di-escape, namun karakter '<' '>' ' sudah
-        //    aman; kita filter karakter penutup pada sisi URL juga.
-        html = html.replace(
-            /\[([^\]]+)\]\((https?:\/\/[^\s<>()\[\]"']+)\)/g,
-            '<a href="$2" target="_blank" rel="noopener noreferrer" style="color: #4da6ff; text-decoration: none;">$1</a>'
-        );
-
-        // 3. PARSE RAW URLS: http(s)://... -> <a href="...">...</a>
-        //    Hindari menangkap link yang sudah dibuat di langkah 2 dengan
-        //    lookbehind: jangan mulai匹配 di dalam atribut href="..." atau href='...'
-        //    dan batasi karakter belakang agar ')', ']', ',', '.', '"', "'"
-        //    tidak ikut terambil (fix bug 404 karena greedy regex).
-        html = html.replace(
-            /(?<!href="|href='|">)(?<!">)\b(https?:\/\/[^\s<>()\[\]"',]+)(?=[^<]*?(?:<|$))/gi,
-            (match, url) => {
-                // Buang karakter penutup yang mungkin masih nyangkut di ekor URL
-                // (mis. titik di akhir kalimat, koma, atau tanda kurung tutup)
-                const cleanedUrl = url.replace(/[)\].,"']+$/g, '');
-                // Jika setelah dibersihkan URL kosong, jangan buat link
-                if (!cleanedUrl || !/^https?:\/\//i.test(cleanedUrl)) return match;
-                return `<a href="${cleanedUrl}" target="_blank" rel="noopener noreferrer" style="color: #4da6ff; text-decoration: underline;">${cleanedUrl}</a>`;
-            }
-        );
-
-        // 4. Inline code: `code` → <code>...</code> (setelah link, agar tidak
-        //    terganggu parsing URL)
-        html = html.replace(/`([^`]+)`/g, '<code>$1</code>');
-
-        // 5. Convert **bold** to <strong>
-        html = html.replace(/\*\*(.*?)\*\*/g, '<strong style="color: #00d4ff;">$1</strong>');
-
-        // 6. Convert newlines to <br>
-        html = html.replace(/\n/g, '<br>');
-
-        return html;
-    }
-
-    // ============ UPDATE LAST AI MESSAGE (STREAMING) ============
-    function updateLastAiMessage(text) {
-        let lastMessage = chatMessages.querySelector('.ai-message:last-child');
-        
-        if (!lastMessage) {
-            lastMessage = addMessage('', 'ai');
-        }
-
-        const content = lastMessage.querySelector('.message-content');
-        if (content) {
-            content.innerHTML = formatMessage(text);
-        }
-
-        scrollToBottom();
-    }
-
-    // ============ SET STATUS ============
-    function setStatus(text, state) {
-        statusText.textContent = text;
-        
-        const colors = {
-            thinking: 'var(--secondary)',
-            listening: 'var(--accent)',
-            idle: 'var(--primary)'
-        };
-        const color = colors[state] || 'var(--primary)';
-        
-        statusDot.style.background = color;
-        statusDot.style.boxShadow = `0 0 8px ${color}`;
-
-        // Update orb state
-        aiOrb.className = 'ai-orb';
-        if (state === 'thinking') aiOrb.classList.add('thinking');
-        if (state === 'listening') aiOrb.classList.add('listening');
-    }
-
-    // ============ SCROLL TO BOTTOM ============
-    function scrollToBottom() {
-        chatMessages.scrollTop = chatMessages.scrollHeight;
-    }
-
-    // ============ CYBER CANVAS (Background Animation) ============
-    function initCanvas() {
-        const ctx = cyberCanvas.getContext('2d');
-        let width, height, particles = [];
-        const particleCount = 80;
-
-        function resize() {
-            width = cyberCanvas.width = window.innerWidth;
-            height = cyberCanvas.height = window.innerHeight;
-        }
-
-        class Particle {
-            constructor() {
-                this.reset();
-            }
-
-            reset() {
-                this.x = Math.random() * width;
-                this.y = Math.random() * height;
-                this.size = Math.random() * 2 + 0.5;
-                this.speedX = (Math.random() - 0.5) * 0.5;
-                this.speedY = (Math.random() - 0.5) * 0.5;
-                this.opacity = Math.random() * 0.5 + 0.2;
-                this.color = Math.random() > 0.5 ? '#00d4ff' : '#ff0066';
-            }
-
-            update() {
-                this.x += this.speedX;
-                this.y += this.speedY;
-
-                if (this.x < 0 || this.x > width || 
-                    this.y < 0 || this.y > height) {
-                    this.reset();
-                }
-            }
-
-            draw() {
-                ctx.beginPath();
-                ctx.arc(this.x, this.y, this.size, 0, Math.PI * 2);
-                ctx.fillStyle = this.color;
-                ctx.globalAlpha = this.opacity;
-                ctx.fill();
-            }
-        }
-
-        function connectParticles() {
-            for (let i = 0; i < particles.length; i++) {
-                for (let j = i + 1; j < particles.length; j++) {
-                    const dx = particles[i].x - particles[j].x;
-                    const dy = particles[i].y - particles[j].y;
-                    const distance = Math.sqrt(dx * dx + dy * dy);
-
-                    if (distance < 150) {
-                        ctx.beginPath();
-                        ctx.strokeStyle = '#00d4ff';
-                        ctx.globalAlpha = (1 - distance / 150) * 0.15;
-                        ctx.lineWidth = 0.5;
-                        ctx.moveTo(particles[i].x, particles[i].y);
-                        ctx.lineTo(particles[j].x, particles[j].y);
-                        ctx.stroke();
-                    }
-                }
-            }
-        }
-
-        function animate() {
-            ctx.clearRect(0, 0, width, height);
-            
-            particles.forEach(particle => {
-                particle.update();
-                particle.draw();
-            });
-
-            connectParticles();
-
-            requestAnimationFrame(animate);
-        }
-
-        resize();
-        window.addEventListener('resize', resize);
-
-        for (let i = 0; i < particleCount; i++) {
-            particles.push(new Particle());
-        }
-
-        animate();
-    }
-
-    // Initialize canvas
-    initCanvas();
-
-    // ============ FALLBACK SIMULATED AI (Non-Electron) ============
-    async function simulateAIResponse(input) {
-        const lowerInput = input.toLowerCase();
-        
-        // Simulasi intent detection seperti di agent.js
-        if (lowerInput.includes('buka') && (lowerInput.includes('.com') || lowerInput.includes('.org') || lowerInput.includes('.net'))) {
-            return `🌐 Membuka website... (fungsi browser akan aktif di Electron)`;
-        } else if (lowerInput.includes('cari') && (lowerInput.includes('internet') || lowerInput.includes('google') || lowerInput.includes('web'))) {
-            return `🔍 Mencari informasi... (fungsi search akan aktif di Electron)`;
-        } else if (lowerInput.includes('putar') && (lowerInput.includes('musik') || lowerInput.includes('lagu'))) {
-            return `🎵 Memutar musik... (fungsi YouTube Music akan aktif di Electron)`;
-        } else if (lowerInput.includes('putar') && lowerInput.includes('video') || lowerInput.includes('tonton')) {
-            return `🎬 Memutar video... (fungsi YouTube akan aktif di Electron)`;
-        } else if (lowerInput.includes('halo') || lowerInput.includes('hai') || lowerInput.includes('hello')) {
-            return 'Halo! Saya Jarvis, AI Agent universal Anda. Saya bisa:\n\n🌐 **Buka & Baca Website**\n🔍 **Cari Informasi di Internet**\n🎵 **Putar Musik YouTube Music**\n🎬 **Putar Video YouTube**\n💬 **Chat & Ingat Konteks**\n\nAda yang bisa saya bantu?';
-        } else if (lowerInput.includes('siapa') && lowerInput.includes('kamu')) {
-            return 'Saya **JARVIS** — Just A Rather Very Intelligent System.\nAsisten AI pribadi Anda yang berjalan di model lokal Ollama (qwen2.5:7b).\n\nSaya bisa mengakses web, memutar musik/video YouTube, dan chat dengan memori konteks!';
-        } else {
-            return `Saya menerima: "${input}"\n\n💡 Untuk menggunakan semua fitur, jalankan aplikasi di Electron dengan Ollama aktif.\n\nSaya bisa:\n• Buka website: "buka google.com"\n• Cari info: "cari berita terbaru"\n• Putar musik: "putar lagu bohemian rhapsody"\n• Putar video: "putar video tutorial"\n• Chat biasa: "halo, apa kabar?"`;
-        }
-    }
-
-    console.log('🚀 JARVIS Universal AI Agent UI initialized!');
-    console.log('📋 Available: Web Browsing, Web Search, YouTube Music, YouTube Video, AI Chat');
+/**
+ * src/gui/ui_handler.js
+ * Menghubungkan semua interaksi UI ke API window.jarvis (lewat preload.js).
+ *
+ * Ditulis ulang untuk mendukung 2 fitur baru:
+ * - Chat History: sidebar percakapan (list/buat/pindah/hapus)
+ * - Thinking Process: panel collapsible berisi trace tiap balasan AI
+ */
+
+// ===================== ELEMENT REFERENCES =====================
+const chatMessages = document.getElementById('chatMessages');
+const userInput = document.getElementById('userInput');
+const sendBtn = document.getElementById('sendBtn');
+const voiceBtn = document.getElementById('voiceBtn');
+const attachBtn = document.getElementById('attachBtn');
+const imageInput = document.getElementById('imageInput');
+const imagePreviewContainer = document.getElementById('imagePreviewContainer');
+const imagePreview = document.getElementById('imagePreview');
+const removeImageBtn = document.getElementById('removeImageBtn');
+const statusText = document.getElementById('statusText');
+
+const sidebar = document.getElementById('sidebar');
+const toggleSidebarBtn = document.getElementById('toggle-sidebar-btn');
+const newChatBtn = document.getElementById('newChatBtn');
+const conversationList = document.getElementById('conversationList');
+const conversationEmptyState = document.getElementById('conversationEmptyState');
+
+const minimizeBtn = document.getElementById('minimizeBtn');
+const maximizeBtn = document.getElementById('maximizeBtn');
+const closeBtn = document.getElementById('closeBtn');
+
+const aiMessageTemplate = document.getElementById('aiMessageTemplate');
+const userMessageTemplate = document.getElementById('userMessageTemplate');
+const conversationItemTemplate = document.getElementById('conversationItemTemplate');
+
+// ===================== STATE =====================
+let activeConversationId = null;
+let pendingImageBase64 = null;
+let isProcessing = false; // cegah kirim pesan bersamaan (satu request pada satu waktu)
+
+// ===================== WINDOW CONTROLS =====================
+minimizeBtn?.addEventListener('click', () => window.jarvis.minimizeWindow());
+maximizeBtn?.addEventListener('click', () => window.jarvis.maximizeWindow());
+closeBtn?.addEventListener('click', () => window.jarvis.closeWindow());
+
+// ===================== SIDEBAR TOGGLE =====================
+toggleSidebarBtn?.addEventListener('click', () => {
+    sidebar.classList.toggle('collapsed');
 });
+
+// ===================== CODE PREVIEW PANE TOGGLE (placeholder) =====================
+const codeSidebar = document.getElementById('code-sidebar');
+const toggleCodeBtn = document.getElementById('toggle-code-btn');
+toggleCodeBtn?.addEventListener('click', () => {
+    codeSidebar.classList.toggle('collapsed');
+});
+
+// ===================== THINKING PROCESS: LABEL MAPPING =====================
+/**
+ * Ubah 1 trace step dari agent.js (emitTrace) jadi baris teks yang
+ * enak dibaca manusia di panel Thinking Process.
+ */
+function formatTraceStep(step) {
+    switch (step.type) {
+        case 'routing': {
+            const tools = (step.toolsConsidered || []).join(', ') || '(tidak ada, mode chat biasa)';
+            const cats = Object.keys(step.categoryScores || {}).join(', ') || '-';
+            return `🧭 Kategori terpilih: ${cats} → Tool dipertimbangkan: ${tools}`;
+        }
+        case 'tool_call': {
+            const list = (step.tools || []).map(t => `${t.tool}("${t.query}")`).join(', ');
+            return `⚙️ Menjalankan: ${list}`;
+        }
+        case 'tool_result': {
+            return (step.results || []).map(r =>
+                r.success ? `✅ ${r.tool} berhasil` : `❌ ${r.tool} gagal: ${r.error || 'unknown error'}`
+            ).join('\n');
+        }
+        case 'retry':
+            return `🔁 Percobaan ulang #${step.attempt} — alasan: ${step.reason}`;
+        case 'stale_knowledge_override':
+            return `⏱️ Info berpotensi usang, dialihkan ke pencarian web`;
+        case 'synthesis_start':
+            return `📝 Merangkum hasil tool jadi jawaban akhir...`;
+        case 'chat_response':
+            return `💬 Menjawab langsung tanpa tool`;
+        case 'final_fallback':
+            return `⚠️ Semua percobaan gagal — memberi jawaban permintaan maaf`;
+        case 'error':
+            return `🚨 Error: ${step.message}`;
+        case 'done':
+            return `✔️ Selesai`;
+        case 'file_draft':
+            return `📄 Draft file "${step.filename}" dikirim ke Code Preview, menunggu konfirmasi`;
+        case 'file_view':
+            return `📄 Menampilkan isi "${step.filename}" di Code Preview`;
+        default:
+            return `• ${step.type}`;
+    }
+}
+
+function traceStepLabel(step) {
+    // Label singkat yang tampil di header panel (sebelum diklik buka)
+    switch (step.type) {
+        case 'routing': return 'Menganalisis permintaan...';
+        case 'tool_call': return 'Menjalankan tool...';
+        case 'tool_result': return 'Memproses hasil tool...';
+        case 'retry': return `Mencoba ulang (percobaan ${step.attempt})...`;
+        case 'synthesis_start': return 'Merangkum hasil...';
+        case 'done': return 'Proses berpikir selesai';
+        case 'chat_response': return 'Menjawab langsung';
+        case 'final_fallback': return 'Gagal setelah beberapa percobaan';
+        case 'error': return 'Terjadi kesalahan';
+        default: return 'Memproses...';
+    }
+}
+
+// ===================== CODE PREVIEW PANE (File Draft / View) =====================
+const codeContentInner = document.getElementById('codeContentInner');
+const codeFileName = document.getElementById('codeFileName');
+
+function expandCodeSidebar() {
+    codeSidebar.classList.remove('collapsed');
+}
+
+/**
+ * Render draft file (dari create_file yang di-intercept) — bisa diedit,
+ * ada tombol Simpan (tulis ke disk via confirmSaveFile) dan Batalkan.
+ */
+function renderFileDraft(filename, content) {
+    expandCodeSidebar();
+    codeFileName.textContent = filename;
+
+    codeContentInner.innerHTML = '';
+
+    const textarea = document.createElement('textarea');
+    textarea.className = 'code-editor';
+    textarea.value = content;
+    codeContentInner.appendChild(textarea);
+
+    const actions = document.createElement('div');
+    actions.className = 'code-actions';
+
+    const saveBtn = document.createElement('button');
+    saveBtn.className = 'code-btn code-btn-save';
+    saveBtn.textContent = 'Simpan';
+
+    const discardBtn = document.createElement('button');
+    discardBtn.className = 'code-btn code-btn-discard';
+    discardBtn.textContent = 'Batalkan';
+
+    const statusMsg = document.createElement('div');
+    statusMsg.className = 'code-status-msg';
+
+    saveBtn.addEventListener('click', async () => {
+        saveBtn.disabled = true;
+        saveBtn.textContent = 'Menyimpan...';
+        const result = await window.jarvis.confirmSaveFile({
+            filename,
+            content: textarea.value // pakai versi yang sudah diedit user jika ada
+        });
+
+        if (result?.success) {
+            statusMsg.textContent = `✅ Tersimpan di ${result.filePath} (${result.sizeKB} KB)`;
+            statusMsg.classList.add('success');
+            textarea.disabled = true;
+            saveBtn.remove();
+            discardBtn.textContent = 'Tutup';
+        } else {
+            statusMsg.textContent = `❌ Gagal menyimpan: ${result?.error || 'unknown error'}`;
+            statusMsg.classList.add('error');
+            saveBtn.disabled = false;
+            saveBtn.textContent = 'Simpan';
+        }
+    });
+
+    discardBtn.addEventListener('click', () => {
+        clearCodePreview();
+    });
+
+    actions.appendChild(saveBtn);
+    actions.appendChild(discardBtn);
+    codeContentInner.appendChild(actions);
+    codeContentInner.appendChild(statusMsg);
+}
+
+/**
+ * Render isi file hasil read_file — read-only, tanpa tombol simpan
+ * (karena file ini sudah ada di disk, bukan draft baru).
+ */
+function renderFileView(filename, content) {
+    expandCodeSidebar();
+    codeFileName.textContent = filename;
+
+    codeContentInner.innerHTML = '';
+    const pre = document.createElement('pre');
+    pre.className = 'code-view';
+    pre.textContent = content;
+    codeContentInner.appendChild(pre);
+}
+
+function clearCodePreview() {
+    codeFileName.textContent = 'Code Preview';
+    codeContentInner.innerHTML = '<div class="code-placeholder">Belum ada konten untuk ditampilkan di sini.</div>';
+}
+
+// ===================== MARKDOWN RENDERING (RINGAN) =====================
+/**
+ * Konversi markdown dasar ke HTML, dengan escape HTML dulu (anti-XSS)
+ * sebelum menerapkan rule markdown. Cukup untuk kebutuhan Jarvis:
+ * bold, newline, bullet list, dan link — bukan parser markdown lengkap.
+ */
+function escapeHtml(text) {
+    const div = document.createElement('div');
+    div.textContent = text;
+    return div.innerHTML;
+}
+
+function renderMarkdownLite(text) {
+    let html = escapeHtml(text);
+    html = html.replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>');
+    html = html.replace(/\[([^\]]+)\]\((https?:\/\/[^\s)]+)\)/g, '<a href="$2" target="_blank">$1</a>');
+    html = html.replace(/(?<!href="|>)(https?:\/\/[^\s<]+)/g, '<a href="$1" target="_blank">$1</a>');
+    html = html.replace(/^[•\-]\s+(.+)$/gm, '<span class="bullet-line">• $1</span>');
+    html = html.replace(/\n/g, '<br>');
+    return html;
+}
+
+// ===================== MESSAGE RENDERING =====================
+
+function scrollToBottom() {
+    chatMessages.scrollTop = chatMessages.scrollHeight;
+}
+
+function renderUserMessage(text) {
+    const node = userMessageTemplate.content.cloneNode(true);
+    node.querySelector('.message-text').innerHTML = renderMarkdownLite(text);
+    chatMessages.appendChild(node);
+    scrollToBottom();
+}
+
+/**
+ * Render placeholder pesan AI (dengan panel thinking kosong + loading dots),
+ * return referensi elemen-elemen pentingnya supaya bisa diupdate live
+ * seiring trace/token masuk.
+ */
+function renderAiMessagePlaceholder() {
+    const node = aiMessageTemplate.content.cloneNode(true);
+    const wrapper = node.querySelector('.ai-message-wrapper');
+    chatMessages.appendChild(node);
+    scrollToBottom();
+
+    const thinkingPanel = wrapper.querySelector('.thinking-panel');
+    const thinkingLabel = wrapper.querySelector('.thinking-label');
+    const thinkingBody = wrapper.querySelector('.thinking-body');
+    const thinkingHeader = wrapper.querySelector('.thinking-header');
+    const messageText = wrapper.querySelector('.message-text');
+
+    // Klik header untuk buka/tutup panel
+    thinkingHeader.addEventListener('click', () => {
+        thinkingPanel.classList.toggle('expanded');
+    });
+
+    return { wrapper, thinkingPanel, thinkingLabel, thinkingBody, thinkingHeader, messageText };
+}
+
+function appendTraceStepToPanel(refs, step) {
+    const row = document.createElement('div');
+    row.className = 'thinking-step';
+    row.innerHTML = `<span class="step-icon">›</span><span>${formatTraceStep(step).replace(/\n/g, '<br>')}</span>`;
+    refs.thinkingBody.appendChild(row);
+    refs.thinkingLabel.textContent = traceStepLabel(step);
+}
+
+// Render ulang 1 pesan dari data tersimpan (dipakai saat load percakapan lama)
+function renderStoredMessage(msg) {
+    if (msg.role === 'user') {
+        renderUserMessage(msg.content);
+    } else if (msg.role === 'assistant') {
+        const node = aiMessageTemplate.content.cloneNode(true);
+        const wrapper = node.querySelector('.ai-message-wrapper');
+        // Percakapan lama tidak punya trace tersimpan — sembunyikan panel thinking
+        wrapper.querySelector('.thinking-panel').remove();
+        wrapper.querySelector('.message-text').innerHTML = renderMarkdownLite(msg.content);
+        chatMessages.appendChild(node);
+    }
+    // role 'system' (ringkasan auto-compaction) sengaja tidak ditampilkan ke user
+}
+
+function clearChatMessages() {
+    chatMessages.innerHTML = '';
+}
+
+function renderWelcomeMessage() {
+    const node = aiMessageTemplate.content.cloneNode(true);
+    const wrapper = node.querySelector('.ai-message-wrapper');
+    wrapper.querySelector('.thinking-panel').remove();
+    wrapper.querySelector('.message-text').textContent = 'Halo! Saya Jarvis, asisten AI pribadi Anda. Ada yang bisa saya bantu?';
+    chatMessages.appendChild(node);
+}
+
+// ===================== SENDING MESSAGES =====================
+
+async function sendMessage() {
+    const text = userInput.value.trim();
+    if (!text && !pendingImageBase64) return;
+    if (isProcessing) return;
+
+    isProcessing = true;
+    sendBtn.disabled = true;
+    userInput.value = '';
+
+    renderUserMessage(text || '[Gambar terlampir]');
+    const refs = renderAiMessagePlaceholder();
+
+    const payload = pendingImageBase64
+        ? { text, image: pendingImageBase64 }
+        : text;
+
+    clearPendingImage();
+    statusText.textContent = 'Memproses...';
+
+    // Listener token & trace di-attach sekali per request, lalu dilepas
+    // setelah selesai — karena channel IPC-nya global (bukan per-request).
+    let firstTokenReceived = false;
+    let rawBuffer = '';
+
+    const onToken = (token) => {
+        if (!firstTokenReceived) {
+            refs.messageText.textContent = '';
+            firstTokenReceived = true;
+        }
+        rawBuffer += token;
+        refs.messageText.innerHTML = renderMarkdownLite(rawBuffer);
+        scrollToBottom();
+    };
+
+    const onTrace = (step) => {
+        appendTraceStepToPanel(refs, step);
+        // Dua tipe trace khusus ini ditangani terpisah untuk mengisi
+        // Code Preview pane, bukan cuma tampil di panel thinking.
+        if (step.type === 'file_draft') {
+            renderFileDraft(step.filename, step.content);
+        } else if (step.type === 'file_view') {
+            renderFileView(step.filename, step.content);
+        }
+        scrollToBottom();
+    };
+
+    window.jarvis.onStreamToken(onToken);
+    window.jarvis.onTraceUpdate(onTrace);
+
+    try {
+        const result = await window.jarvis.sendCommandStream(payload);
+        const finalText = result?.response;
+
+        if (!result?.success) {
+            refs.messageText.innerHTML = renderMarkdownLite(finalText || 'Terjadi kesalahan tidak diketahui.');
+        } else if (!firstTokenReceived && finalText) {
+            refs.messageText.innerHTML = renderMarkdownLite(finalText);
+        }
+        refs.thinkingLabel.textContent = 'Proses berpikir selesai';
+        refs.thinkingHeader.querySelector('.chevron').style.display = 'inline-block';
+    } catch (err) {
+        refs.messageText.textContent = `❌ Terjadi kesalahan: ${err.message || err}`;
+    } finally {
+        statusText.textContent = 'Siap';
+        isProcessing = false;
+        sendBtn.disabled = false;
+        // Refresh sidebar supaya judul percakapan (auto-generate dari pesan pertama) ikut update
+        loadConversationList();
+    }
+}
+
+sendBtn?.addEventListener('click', sendMessage);
+userInput?.addEventListener('keydown', (e) => {
+    if (e.key === 'Enter' && !e.shiftKey) {
+        e.preventDefault();
+        sendMessage();
+    }
+});
+
+// ===================== IMAGE ATTACHMENT =====================
+attachBtn?.addEventListener('click', () => imageInput.click());
+
+imageInput?.addEventListener('change', (e) => {
+    const file = e.target.files[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = () => {
+        // Buang prefix "data:image/...;base64," — kirim base64 murni ke backend
+        pendingImageBase64 = reader.result.split(',')[1];
+        imagePreview.src = reader.result;
+        imagePreviewContainer.classList.remove('hidden');
+    };
+    reader.readAsDataURL(file);
+});
+
+function clearPendingImage() {
+    pendingImageBase64 = null;
+    imageInput.value = '';
+    imagePreviewContainer.classList.add('hidden');
+    imagePreview.src = '';
+}
+
+removeImageBtn?.addEventListener('click', clearPendingImage);
+
+// ===================== VOICE INPUT =====================
+let recognition = null;
+let isListening = false;
+
+function initVoiceRecognition() {
+    const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+    if (!SpeechRecognition) {
+        console.warn('[Jarvis] Web Speech API tidak tersedia di environment ini.');
+        return null;
+    }
+    const rec = new SpeechRecognition();
+    rec.lang = 'id-ID';
+    rec.continuous = false;
+    rec.interimResults = false;
+
+    rec.onresult = (event) => {
+        const transcript = event.results[0][0].transcript;
+        userInput.value = transcript;
+    };
+    rec.onend = () => {
+        isListening = false;
+        voiceBtn.classList.remove('listening');
+    };
+    rec.onerror = (e) => {
+        console.error('[Jarvis] Voice recognition error:', e.error);
+        isListening = false;
+        voiceBtn.classList.remove('listening');
+    };
+    return rec;
+}
+
+voiceBtn?.addEventListener('click', () => {
+    if (!recognition) recognition = initVoiceRecognition();
+    if (!recognition) {
+        statusText.textContent = 'Voice input tidak didukung di perangkat ini';
+        return;
+    }
+    if (isListening) {
+        recognition.stop();
+        isListening = false;
+        voiceBtn.classList.remove('listening');
+    } else {
+        recognition.start();
+        isListening = true;
+        voiceBtn.classList.add('listening');
+    }
+});
+
+// ===================== CHAT HISTORY / CONVERSATIONS =====================
+
+async function loadConversationList() {
+    const conversations = await window.jarvis.listConversations();
+    conversationList.innerHTML = '';
+
+    if (!conversations || conversations.length === 0) {
+        conversationList.appendChild(conversationEmptyState);
+        return;
+    }
+
+    conversations.forEach(conv => {
+        const node = conversationItemTemplate.content.cloneNode(true);
+        const item = node.querySelector('.conv-item');
+        item.dataset.id = conv.id;
+        item.querySelector('.conv-title').textContent = conv.title;
+        if (conv.id === activeConversationId) item.classList.add('active');
+
+        item.addEventListener('click', (e) => {
+            if (e.target.closest('.conv-delete-btn')) return; // biar tidak switch saat klik hapus
+            switchToConversation(conv.id);
+        });
+
+        item.querySelector('.conv-delete-btn').addEventListener('click', async (e) => {
+            e.stopPropagation();
+            await window.jarvis.deleteConversation(conv.id);
+            if (conv.id === activeConversationId) {
+                await startNewConversation();
+            } else {
+                loadConversationList();
+            }
+        });
+
+        conversationList.appendChild(node);
+    });
+}
+
+async function switchToConversation(conversationId) {
+    if (conversationId === activeConversationId) return;
+    const conv = await window.jarvis.loadConversation(conversationId);
+    if (!conv) return;
+
+    activeConversationId = conversationId;
+    await window.jarvis.switchConversation(conversationId);
+
+    clearChatMessages();
+    if (conv.messages && conv.messages.length > 0) {
+        conv.messages.forEach(renderStoredMessage);
+    } else {
+        renderWelcomeMessage();
+    }
+    loadConversationList();
+}
+
+async function startNewConversation() {
+    const conv = await window.jarvis.createConversation();
+    activeConversationId = conv.id;
+    await window.jarvis.switchConversation(conv.id);
+    clearChatMessages();
+    renderWelcomeMessage();
+    loadConversationList();
+}
+
+newChatBtn?.addEventListener('click', startNewConversation);
+
+// ===================== INIT =====================
+async function init() {
+    window.jarvis.windowReady();
+
+    const conversations = await window.jarvis.listConversations();
+    if (conversations && conversations.length > 0) {
+        // Buka percakapan paling baru secara default
+        await switchToConversation(conversations[0].id);
+    } else {
+        await startNewConversation();
+    }
+}
+
+init();

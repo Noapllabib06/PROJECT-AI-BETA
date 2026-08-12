@@ -137,6 +137,13 @@ class CredentialManager {
         return `❌ Tidak ada kredensial untuk **${site}**.`;
     }
 
+    deleteAllCredentials() {
+        const count = Object.keys(this.credentials).length;
+        this.credentials = {};
+        this.saveCredentials();
+        return `✅ Semua kredensial (${count} akun) berhasil dihapus.`;
+    }
+
     /**
      * Dapatkan kredensial untuk sebuah situs
      * @param {string} site - Nama situs

@@ -9,6 +9,14 @@
  * 4. LLM output JSON { tool, query } — parsing standar
  * 5. Eksekusi tool via registry.execute()
  * 6. Jika gagal, Micro ReAct loop maksimal 1 retry
+ *
+ * UPDATE (Chat History + Thinking Process):
+ * - Setiap percakapan sekarang punya conversationId, history-nya
+ *   di-load/save ke disk lewat conversation_manager.js (bukan cuma
+ *   di RAM lagi seperti sebelumnya).
+ * - Ditambahkan onTraceCallback: mengirim event terstruktur di setiap
+ *   tahap pipeline (routing, tool call, retry, hasil) supaya UI bisa
+ *   menampilkan panel "Thinking Process" yang detail.
  */
 
 const { ChatOllama } = require("@langchain/ollama");
@@ -19,15 +27,12 @@ const registry = require("../tools/registry");
 const { generateErrorFeedback } = require("./feedback_loop");
 const json_validator = require("./json_validator");
 const axios = require("axios");
+const conversationManager = require("./conversation_manager");
 
 // Muat semua tool dari registry sekali saat startup
 registry.loadAll();
 
 // ===================== DYNAMIC TOOL ROUTING =====================
-// Heuristic keyword mapper untuk mengelompokkan tool berdasarkan kategori.
-// Setiap kategori memiliki daftar keyword pemicu dan tool yang sesuai.
-// Kategori diurutkan berdasarkan skor jumlah keyword match (scoring-based).
-
 const TOOL_CATEGORIES = {
     WEB: {
         keywords: ['cari', 'berita', 'web', 'google', 'search', 
@@ -44,21 +49,48 @@ const TOOL_CATEGORIES = {
     },
     FILE: {
         keywords: ['berkas', 'file', 'tulis', 'baca', 'kode', 'catatan', 'dokumen', 'document',
-                   'buka file', 'folder', 'proyek', 'project', 'indeks kode', 'codebase'],
-        tools: ['create_file', 'read_file', 'ingest_codebase']
+                   'buka file', 'folder', 'proyek', 'project', 'screenshot', 'tangkap layar', 
+                   'capture layar', 'ambil gambar layar', 'indeks kode', 'codebase', 'foto',
+                   'ada apa di layar', 'jelaskan layar', 'analisa layar', 'analisa screenshot',
+                   'apa yang terlihat', 'lihat layar saya'],
+        tools: ['create_file', 'read_file', 'ingest_codebase', 'take_screenshot', 'analyze_screen']
     },
     MEMORY: {
-        keywords: ['ingat', 'memori', 'simpan', 'lupa', 'ingatan', 'kode', 'rahasia', 'remember', 'forget', 'memory', 'save', 'past'],
+        keywords: ['ingat', 'memori', 'simpan', 'lupa', 'ingatan', 'remember', 'forget', 'memory', 'save', 'past'],
         tools: ['save_memory', 'search_memory']
+    },
+    APP: {
+        keywords: ['kalkulator', 'calculator', 'notepad', 'catatan', 'wordpad', 'paint',
+                   'file explorer', 'task manager', 'pengelola tugas', 'control panel',
+                   'panel kontrol', 'command prompt', 'powershell', 'vscode', 'visual studio code',
+                   'discord', 'spotify', 'steam', 'telegram', 'snipping tool',
+                   'buka aplikasi', 'jalankan aplikasi', 'aplikasi',
+                   'volume', 'suara', 'kencangkan', 'pelankan', 'naikkan volume',
+                   'turunkan volume', 'mute', 'unmute'],
+        tools: ['open_app', 'control_volume']
+    },
+    EMAIL: {
+        keywords: ['email', 'e-mail', 'gmail', 'inbox', 'surel',
+                   'cek email', 'ada email', 'email baru', 'email masuk',
+                   'outlook', 'yahoo mail'],
+        tools: ['check_email']
+    },
+    CREDENTIALS: {
+        keywords: ['kredensial', 'credential', 'password', 'kata sandi', 'sandi',
+                   'login', 'akun', 'simpan password', 'simpan kredensial',
+                   'simpan akun', 'lupa password', 'hapus kredensial',
+                   'daftar kredensial', 'daftar akun tersimpan'],
+        tools: ['save_credential', 'list_credentials', 'delete_credential']
     }
 };
 
-/**
- * Menganalisis input user untuk menentukan kategori tool yang relevan
- * menggunakan scoring-based approach (jumlah keyword match per kategori).
- * @param {string} userInput - Input dari user yang sudah dibersihkan
- * @returns {Array} - Array nama tool yang relevan (max 5), diurutkan berdasarkan relevansi
- */
+const SENSITIVE_CONTENT_PATTERN = /password|kredensial|credential|kata sandi|\bsandi\b|api[_\s]?key|token|secret|rahasia|\bpin\b|save_credential/i;
+
+function isSensitiveContent(text) {
+    if (!text || typeof text !== 'string') return false;
+    return SENSITIVE_CONTENT_PATTERN.test(text);
+}
+
 function determineRelevantTools(userInput) {
     if (!userInput || typeof userInput !== 'string') return [];
 
@@ -72,29 +104,22 @@ function determineRelevantTools(userInput) {
 
     if (Object.keys(categoryScores).length === 0) {
         logger.debug('ToolRouter', 'No categories matched — pure chat mode');
-        return [];
+        return { tools: [], categoryScores: {} };
     }
 
-    // Urutkan kategori berdasarkan skor tertinggi
     const sortedCategories = Object.entries(categoryScores).sort((a, b) => b[1] - a[1]);
     const selectedTools = new Set();
     for (const [categoryName] of sortedCategories) {
         TOOL_CATEGORIES[categoryName].tools.forEach(t => selectedTools.add(t));
     }
 
-    // Batasi maksimal 5 tools untuk mencegah choice overload
     const limitedTools = Array.from(selectedTools).slice(0, 5);
     
     logger.debug('ToolRouter', `Category scores: ${JSON.stringify(categoryScores)} -> Tools: [${limitedTools.join(', ')}]`);
     
-    return limitedTools;
+    return { tools: limitedTools, categoryScores };
 }
 
-/**
- * Mendapatkan definisi tool dari registry berdasarkan nama tool yang dipilih.
- * @param {Array} toolNames - Array nama tool
- * @returns {Array} - Array tool definition objects
- */
 function getFilteredToolDefinitions(toolNames) {
     if (!toolNames || toolNames.length === 0) return [];
     
@@ -117,6 +142,21 @@ function requiresForcedWebSearch(userInput) {
     return STALE_KNOWLEDGE_KEYWORDS.some(kw => lower.includes(kw));
 }
 
+/**
+ * Helper kecil untuk mengirim event trace ke UI (jika callback disediakan).
+ * Dipanggil di setiap tahap penting pipeline. Aman dipanggil meski
+ * onTraceCallback null/undefined (no-op).
+ */
+function emitTrace(onTraceCallback, step) {
+    if (typeof onTraceCallback === 'function') {
+        try {
+            onTraceCallback({ timestamp: Date.now(), ...step });
+        } catch (e) {
+            logger.error('Agent.trace', `Gagal emit trace: ${e.message}`);
+        }
+    }
+}
+
 // ===================== AGENT CLASS =====================
 
 class JarvisAgent {
@@ -136,16 +176,17 @@ class JarvisAgent {
         this.chatHistory = [];
         this.maxChatHistory = 15;
         this.isCompacting = false;
-        // TODO: belum diimplementasi, reserved untuk fitur context-aware follow-up
-        this.history = []; 
-        this.maxHistory = 12;
         this.currentState = "Menunggu perintah pengguna (Idle)"; 
-        // TODO: belum diimplementasi, reserved untuk fitur context-aware follow-up
-        this.lastOpenedUrl = null;
         this.lastToolOutput = null;
         this.lastTool = null;
         this.lastQuery = null;
         this.createdFilesInSession = new Set();
+
+        // ID percakapan aktif saat ini. Jika null, agent berjalan
+        // dalam mode "tanpa persistence" (backward-compatible, chatHistory
+        // cuma di RAM seperti versi lama) — supaya kode lama yang belum
+        // sempat kirim conversationId tidak langsung rusak.
+        this.activeConversationId = null;
         
         logger.info('JarvisAgent', 'Agent initialized with Ollama model: qwen2.5:7b');
     }
@@ -155,11 +196,43 @@ class JarvisAgent {
         logger.debug('JarvisAgent', `State updated: "${newState}"`);
     }
 
+    /**
+     * Ganti percakapan aktif — load history dari disk ke this.chatHistory.
+     * Dipanggil dari main.js saat user klik percakapan lain di sidebar,
+     * atau saat mulai percakapan baru.
+     */
+    switchConversation(conversationId) {
+        if (!conversationId) {
+            this.activeConversationId = null;
+            this.chatHistory = [];
+            return;
+        }
+        const conv = conversationManager.loadConversation(conversationId);
+        if (!conv) {
+            logger.warn('JarvisAgent', `Percakapan ${conversationId} tidak ditemukan, mulai kosong.`);
+            this.activeConversationId = conversationId;
+            this.chatHistory = [];
+            return;
+        }
+        this.activeConversationId = conversationId;
+        this.chatHistory = conv.messages || [];
+        logger.info('JarvisAgent', `Beralih ke percakapan ${conversationId} (${this.chatHistory.length} pesan).`);
+    }
+
+    /**
+     * Simpan chatHistory saat ini ke disk, jika ada percakapan aktif.
+     */
+    _persistConversation() {
+        if (!this.activeConversationId) return;
+        try {
+            conversationManager.saveConversation(this.activeConversationId, this.chatHistory);
+        } catch (e) {
+            logger.error('JarvisAgent', `Gagal menyimpan percakapan: ${e.message}`);
+        }
+    }
+
     async _unloadModel(modelName) {
         try {
-            // VRAM GUARD: RTX 4050 6GB Constraint.
-            // Memaksa Ollama untuk unload model dari memori GPU secara instan
-            // untuk menghindari OOM saat perpindahan dari Qwen ke LLaVA atau sebaliknya.
             await axios.post('http://127.0.0.1:11434/api/generate', {
                 model: modelName,
                 keep_alive: 0
@@ -172,17 +245,24 @@ class JarvisAgent {
 
     async _extractFactsBackground(userInput) {
         try {
+            if (isSensitiveContent(userInput)) {
+                logger.debug('FactExtractor', 'Input mengandung kata sensitif, dilewati demi keamanan.');
+                return;
+            }
+
             const prompt = `Ekstrak fakta permanen tentang pengguna dari pesan ini (jika ada). 
-Jika tidak ada informasi penting permanen (seperti nama, hobi, pekerjaan, preferensi), kembalikan tepat kata "NONE" tanpa tanda kutip.
+            Jika tidak ada informasi penting permanen (seperti nama, hobi, pekerjaan, preferensi), kembalikan tepat kata "NONE" tanpa tanda kutip.
 Pesan: "${userInput}"`;
 
             const response = await this.model.invoke([{ role: 'user', content: prompt }]);
             const result = (response.content || "").trim();
 
-            if (result && result !== "NONE" && result.length > 0) {
+            if (result && result !== "NONE" && result.length > 0 && !isSensitiveContent(result)) {
                 const memory_manager = require('./memory_manager');
                 memory_manager.addFacts(result);
                 logger.debug('FactExtractor', `Fakta baru ditemukan: ${result}`);
+            } else if (isSensitiveContent(result)) {
+                logger.debug('FactExtractor', 'Hasil ekstraksi mengandung kata sensitif, dilewati demi keamanan.');
             }
         } catch (e) {
             logger.error('FactExtractor', 'Gagal mengekstrak fakta: ' + e.message);
@@ -194,7 +274,6 @@ Pesan: "${userInput}"`;
         this.isCompacting = true;
 
         try {
-            // Ambil 4 pesan pertama
             const toCompact = this.chatHistory.slice(0, 4);
             const conversationText = toCompact.map(m => `${m.role}: ${m.content}`).join('\n');
             const prompt = `Buatlah ringkasan singkat tapi padat dari 4 pesan percakapan berikut:\n${conversationText}\n\nRingkasan harus mempertahankan konteks utama dan informasi penting. JANGAN menjawab percakapan tersebut, cukup ringkas saja.`;
@@ -204,9 +283,9 @@ Pesan: "${userInput}"`;
             const summary = (response.content || "").trim();
 
             if (summary) {
-                // Potong 4 pesan pertama, gantikan dengan ringkasan
                 this.chatHistory.splice(0, 4, { role: 'system', content: `[Ringkasan percakapan sebelumnya]: ${summary}` });
                 logger.info('AutoCompaction', 'Berhasil meringkas history chat.');
+                this._persistConversation();
             }
         } catch (e) {
             logger.error('AutoCompaction', 'Gagal meringkas history: ' + e.message);
@@ -227,27 +306,17 @@ Pesan: "${userInput}"`;
 
     /**
      * One-Shot Router with Dynamic Tool Routing + Micro ReAct
-     * 
-     * Alur:
-     * A. Bersihkan input user dengan cleanInput()
-     * B. Analisis input → tentukan kategori tool yang relevan (scoring-based)
-     * C. Filter tool definitions berdasarkan kategori
-     * D. Panggil Ollama API dengan system prompt yang sudah difilter
-     * E. Parse JSON balasan { tool, query }
-     * F. Eksekusi tool via registry.execute()
-     * G. Jika tool gagal & retryCount < 1, inject feedback ke chatHistory & rekursi
-     * H. Jika tool gagal & retryCount >= 1, return graceful apology
+     * UPDATE: sekarang menerima onTraceCallback untuk mengirim
+     * langkah-langkah detail (Thinking Process) ke UI.
      */
-    async _executePipeline(userInput, { onTokenCallback = null, startTime = null, retryCount = 0 } = {}) {
+    async _executePipeline(userInput, { onTokenCallback = null, onTraceCallback = null, startTime = null, retryCount = 0 } = {}) {
         const t0 = startTime || Date.now();
 
-        // VRAM GUARD: Pastikan LLaVA sudah di-unload sebelum Qwen (Logic Agent) berjalan
         if (retryCount === 0) {
             await this._unloadModel("llava:7b");
         }
 
         try {
-            // A. Bersihkan input user — hanya push ke chatHistory jika retry pertama (retryCount === 0)
             const cleanedInput = this.cleanInput(userInput);
             
             if (retryCount === 0) {
@@ -255,11 +324,18 @@ Pesan: "${userInput}"`;
                 if (this.chatHistory.length > this.maxChatHistory) this.chatHistory.shift();
             }
 
-            // B. Dynamic Tool Routing: tentukan tool yang relevan berdasarkan input (scoring-based)
-            const relevantToolNames = determineRelevantTools(cleanedInput);
+            // B. Dynamic Tool Routing
+            const routingResult = determineRelevantTools(cleanedInput);
+            const relevantToolNames = routingResult.tools;
             const filteredToolDefs = getFilteredToolDefinitions(relevantToolNames);
 
-            // C. Bangun system prompt dengan tool yang sudah difilter
+            emitTrace(onTraceCallback, {
+                type: 'routing',
+                retryAttempt: retryCount,
+                categoryScores: routingResult.categoryScores,
+                toolsConsidered: relevantToolNames
+            });
+
             const systemPrompt = _prompt.buildSystemPrompt(filteredToolDefs, this.currentState);
             
             const messages = [
@@ -284,59 +360,104 @@ Pesan: "${userInput}"`;
                 logger.logError('Agent.callLLM', e);
                 const msg = "❌ Maaf, gagal memanggil model AI.";
                 if (onTokenCallback) onTokenCallback(msg);
+                emitTrace(onTraceCallback, { type: 'error', message: 'Gagal memanggil model AI' });
                 return msg;
             }
 
-            // E. Simpan balasan assistant ke chatHistory
             this.chatHistory.push({ role: 'assistant', content: aiOutput });
             if (this.chatHistory.length > this.maxChatHistory) this.chatHistory.shift();
 
-            // F. Parse JSON dari balasan Ollama menggunakan json_validator
             const parseResult = json_validator.parseAndValidateAIOutput(aiOutput);
             
             let toolsToExecute = [];
             if (!parseResult.success) {
-                // Teks biasa tanpa JSON → anggap chat
                 const cleaned = aiOutput.replace(/^["'\s]+|["'\s]+$/g, '');
                 if (onTokenCallback) onTokenCallback(cleaned);
+                emitTrace(onTraceCallback, { type: 'chat_response', retryAttempt: retryCount });
                 logger.jarvis(`${cleaned.substring(0, 200)} (${Date.now() - t0}ms)`);
+                this._persistConversation();
                 return cleaned;
             } else {
-                toolsToExecute = parseResult.data; // Ini selalu Array of tools
+                toolsToExecute = parseResult.data;
             }
 
-            // H. Eksekusi Tool (Paralel)
             const SYNTHESIS_REQUIRED_TOOLS = ['search_web', 'read_webpage', 'research_and_summarize', 'save_memory', 'search_memory'];
             let needsSynthesis = false;
             let rawSynthesisData = "";
             let finalOutput = "";
 
-            // Jika hanya chat biasa
             if (toolsToExecute.length === 1 && toolsToExecute[0].tool === 'chat') {
                 let query = toolsToExecute[0].query;
                 
-                // StaleKnowledgeGuard
                 if (requiresForcedWebSearch(cleanedInput)) {
                     logger.warn('StaleKnowledgeGuard', `Model coba jawab langsung untuk query rawan-basi: "${cleanedInput}". Override ke search_web.`);
+                    emitTrace(onTraceCallback, { type: 'stale_knowledge_override', originalTool: 'chat', overrideTo: 'search_web' });
                     toolsToExecute[0].tool = 'search_web';
                     toolsToExecute[0].query = cleanedInput;
                 } else {
                     if (onTokenCallback) onTokenCallback(query);
+                    emitTrace(onTraceCallback, { type: 'chat_response', retryAttempt: retryCount });
                     logger.jarvis(`${query.substring(0, 200)} (${Date.now() - t0}ms)`);
+                    this._persistConversation();
                     return query;
                 }
             }
 
             const toolNames = toolsToExecute.map(t => t.tool).join(', ');
             if (onTokenCallback) onTokenCallback(`Menjalankan: ${toolNames}...\n`);
+            emitTrace(onTraceCallback, {
+                type: 'tool_call',
+                retryAttempt: retryCount,
+                tools: toolsToExecute.map(t => ({ tool: t.tool, query: t.query }))
+            });
 
-            // Eksekusi semua tool secara paralel
             const executionPromises = toolsToExecute.map(async (tObj) => {
                 const tName = tObj.tool;
                 const tQuery = tObj.query;
-                
+
+                // ===== INTERCEPT: create_file jadi mode DRAFT =====
+                // Tidak menulis ke disk langsung. Parse "filename|content",
+                // kirim ke Code Preview via trace, tunggu konfirmasi user
+                // lewat IPC terpisah (confirm-save-file) di main.js.
+                if (tName === 'create_file') {
+                    const sepIndex = tQuery.indexOf('|');
+                    if (sepIndex === -1) {
+                        return {
+                            tool: tName,
+                            success: false,
+                            error: 'Format salah. Query create_file harus "namafile|isi_konten".'
+                        };
+                    }
+                    const filename = tQuery.substring(0, sepIndex).trim();
+                    const content = tQuery.substring(sepIndex + 1);
+
+                    emitTrace(onTraceCallback, {
+                        type: 'file_draft',
+                        filename,
+                        content
+                    });
+
+                    return {
+                        tool: tName,
+                        success: true,
+                        data: `📄 Draft file **${filename}** siap ditinjau di Code Preview. Cek panel di kanan, edit jika perlu, lalu klik **Simpan** untuk menulis permanen, atau **Batalkan** untuk membuang draft ini.`,
+                        error: null
+                    };
+                }
+
                 try {
                     const execResult = await registry.execute(tName, { query: tQuery });
+
+                    // read_file berhasil -> tampilkan juga isinya di Code Preview
+                    // (read-only, tidak butuh konfirmasi karena tidak mengubah apa pun)
+                    if (tName === 'read_file' && execResult.success) {
+                        emitTrace(onTraceCallback, {
+                            type: 'file_view',
+                            filename: tQuery,
+                            content: execResult.data
+                        });
+                    }
+
                     return {
                         tool: tName,
                         success: execResult.success,
@@ -353,8 +474,13 @@ Pesan: "${userInput}"`;
             });
 
             const results = await Promise.all(executionPromises);
+
+            emitTrace(onTraceCallback, {
+                type: 'tool_result',
+                retryAttempt: retryCount,
+                results: results.map(r => ({ tool: r.tool, success: r.success, error: r.error || null }))
+            });
             
-            // Evaluasi Hasil Tool
             let errorCount = 0;
             let lastError = "";
 
@@ -370,7 +496,6 @@ Pesan: "${userInput}"`;
                         needsSynthesis = true;
                         rawSynthesisData += `\n--- Hasil dari ${res.tool} ---\n${res.data}\n`;
                     } else {
-                        // Tool singkat / aksi selesai
                         if (typeof res.data === 'string') {
                             finalOutput += `${res.data}\n`;
                         } else {
@@ -380,10 +505,10 @@ Pesan: "${userInput}"`;
                 }
             }
 
-            // Jika semua tool gagal, jalankan mekanisme fallback/retry
             if (errorCount > 0 && errorCount === results.length) {
                 if (retryCount < 1) {
                     logger.warn('MicroReAct', `Semua tool gagal. Injecting feedback & retrying (retryCount=${retryCount})...`);
+                    emitTrace(onTraceCallback, { type: 'retry', attempt: retryCount + 1, reason: lastError });
                     const feedbackPrompt = json_validator.generateFeedbackMessage(aiOutput, lastError);
                     this.chatHistory.push({ role: 'user', content: feedbackPrompt });
                     
@@ -391,20 +516,23 @@ Pesan: "${userInput}"`;
                     
                     return await this._executePipeline(userInput, {
                         onTokenCallback,
+                        onTraceCallback,
                         startTime: t0,
                         retryCount: retryCount + 1
                     });
                 } else {
                     const fallbackMsg = `Maaf, saya tidak dapat menyelesaikan perintah Anda: ${lastError}`;
                     logger.warn('MicroReAct', `Final fallback after ${retryCount} retries.`);
+                    emitTrace(onTraceCallback, { type: 'final_fallback', reason: lastError });
                     if (onTokenCallback) onTokenCallback(fallbackMsg);
+                    this._persistConversation();
                     return fallbackMsg;
                 }
             }
 
-            // J. Synthesis pass (hanya jika ada setidaknya satu tool yang butuh disintesis)
             if (needsSynthesis) {
                 if (onTokenCallback) onTokenCallback('\nMerangkum hasil...\n');
+                emitTrace(onTraceCallback, { type: 'synthesis_start' });
 
                 const synthesisPrompt = `Berikut hasil mentah dari tool untuk query "${cleanedInput}":
 
@@ -435,39 +563,40 @@ informasi yang ditemukan kurang relevan/kurang update, jangan memaksakan jawaban
 
                     finalOutput = synthesized + '\n' + finalOutput;
                     if (onTokenCallback) onTokenCallback(finalOutput);
+                    emitTrace(onTraceCallback, { type: 'done', retryAttempt: retryCount });
                     logger.jarvis(`[synthesized] ${synthesized.substring(0, 200)} (${Date.now() - t0}ms)`);
+                    this._persistConversation();
                     return finalOutput;
                 } catch (synthErr) {
                     logger.error('Agent.synthesis', synthErr);
                     const fallbackSynthesis = rawSynthesisData.substring(0, 500) + '... (Synthesis failed)';
                     if (onTokenCallback) onTokenCallback(fallbackSynthesis);
+                    emitTrace(onTraceCallback, { type: 'error', message: 'Synthesis gagal' });
+                    this._persistConversation();
                     return fallbackSynthesis;
                 }
             }
 
-            // Return langsung tanpa synthesis
             if (onTokenCallback) onTokenCallback(finalOutput.trim());
+            emitTrace(onTraceCallback, { type: 'done', retryAttempt: retryCount });
             logger.jarvis(`${finalOutput.substring(0, 200)} (${Date.now() - t0}ms)`);
+            this._persistConversation();
             return finalOutput.trim();
 
         } catch (error) {
             logger.logError('Agent.router', error);
             const msg = `⚠️ System Exception: ${error.message}`;
             if (onTokenCallback) onTokenCallback(msg);
+            emitTrace(onTraceCallback, { type: 'error', message: error.message });
             return msg;
         } finally {
-            this.history = [];
             this.createdFilesInSession.clear();
         }
     }
 
-    /**
-     * Eksekusi langsung ke vision model jika input memiliki gambar
-     */
     async _executeVision(userInput, imageBase64, onTokenCallback) {
         this.updateState('Menganalisis gambar...');
         
-        // VRAM GUARD: Unload Qwen sebelum meload LLaVA
         await this._unloadModel("qwen2.5:7b");
         
         try {
@@ -492,6 +621,7 @@ informasi yang ditemukan kurang relevan/kurang update, jangan memaksakan jawaban
             
             this.chatHistory.push({ role: 'user', content: `[User mengirim gambar] ${promptText}` });
             this.chatHistory.push({ role: 'assistant', content });
+            this._persistConversation();
             
             return content;
         } catch (error) {
@@ -501,15 +631,15 @@ informasi yang ditemukan kurang relevan/kurang update, jangan memaksakan jawaban
             return msg;
         } finally {
             this.updateState('idle');
-            // VRAM GUARD: Unload LLaVA setelah selesai agar RAM kosong
             await this._unloadModel("llava:7b");
         }
     }
 
     /**
-     * Proses input tanpa streaming
+     * Proses input tanpa streaming.
+     * UPDATE: menerima conversationId (opsional) dan onTraceCallback (opsional).
      */
-    async processInput(payload) {
+    async processInput(payload, conversationId = null, onTraceCallback = null) {
         let userInput = payload;
         let imageBase64 = null;
         
@@ -518,8 +648,12 @@ informasi yang ditemukan kurang relevan/kurang update, jangan memaksakan jawaban
             imageBase64 = payload.image;
         }
 
+        if (conversationId && conversationId !== this.activeConversationId) {
+            this.switchConversation(conversationId);
+        }
+
         logger.user(userInput || "[Image Upload]");
-        this._extractFactsBackground(userInput); // fire and forget
+        this._extractFactsBackground(userInput);
 
         if (imageBase64) {
             const res = await this._executeVision(userInput, imageBase64, null);
@@ -527,15 +661,16 @@ informasi yang ditemukan kurang relevan/kurang update, jangan memaksakan jawaban
             return res;
         }
 
-        const res = await this._executePipeline(userInput, { onTokenCallback: null });
-        this._compactHistory(); // fire and forget
+        const res = await this._executePipeline(userInput, { onTokenCallback: null, onTraceCallback });
+        this._compactHistory();
         return res;
     }
 
     /**
-     * Proses input dengan streaming
+     * Proses input dengan streaming.
+     * UPDATE: menerima conversationId (opsional) dan onTraceCallback (opsional).
      */
-    async processInputStream(payload, onTokenCallback) {
+    async processInputStream(payload, onTokenCallback, conversationId = null, onTraceCallback = null) {
         let userInput = payload;
         let imageBase64 = null;
         
@@ -544,8 +679,12 @@ informasi yang ditemukan kurang relevan/kurang update, jangan memaksakan jawaban
             imageBase64 = payload.image;
         }
 
+        if (conversationId && conversationId !== this.activeConversationId) {
+            this.switchConversation(conversationId);
+        }
+
         logger.user(userInput || "[Image Upload]");
-        this._extractFactsBackground(userInput); // fire and forget
+        this._extractFactsBackground(userInput);
 
         if (imageBase64) {
             const res = await this._executeVision(userInput, imageBase64, onTokenCallback);
@@ -553,12 +692,12 @@ informasi yang ditemukan kurang relevan/kurang update, jangan memaksakan jawaban
             return res;
         }
 
-        const res = await this._executePipeline(userInput, { onTokenCallback });
-        this._compactHistory(); // fire and forget
+        const res = await this._executePipeline(userInput, { onTokenCallback, onTraceCallback });
+        this._compactHistory();
         return res;
     }
 }
 
 const agentInstance = new JarvisAgent();
 module.exports = agentInstance;
-module.exports._determineRelevantTools = determineRelevantTools; // export untuk testing
+module.exports._determineRelevantTools = determineRelevantTools;

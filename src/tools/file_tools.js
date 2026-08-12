@@ -54,7 +54,19 @@ async function readFileTool(query) {
             return { success: false, error: "❌ Path file tidak boleh kosong." };
         }
         if (!path.isAbsolute(filePath)) {
-            filePath = path.resolve(process.cwd(), filePath);
+            let resolvedPath = path.resolve(process.cwd(), filePath);
+            if (!fs.existsSync(resolvedPath)) {
+                // Fallback: cek di folder Desktop karena createFile nulis ke Desktop secara default
+                const desktopPath = path.join(os.homedir(), 'Desktop');
+                const altPath = path.resolve(desktopPath, filePath);
+                if (fs.existsSync(altPath)) {
+                    filePath = altPath;
+                } else {
+                    filePath = resolvedPath; // kembalikan untuk pesan error default
+                }
+            } else {
+                filePath = resolvedPath;
+            }
         }
         if (!fs.existsSync(filePath)) {
             return { success: false, error: `❌ File tidak ditemukan: ${filePath}` };
