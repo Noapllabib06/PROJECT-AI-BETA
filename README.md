@@ -1,41 +1,43 @@
 # JARVIS AI Agent
 
-Lokal Desktop Assistant menggunakan Ollama, Node.js (Electron), dan Python (FastAPI).
+Sistem asisten desktop lokal berbasis Ollama, Node.js (Electron), dan Python (FastAPI).
 
-## Fitur Utama
+## Kapabilitas
 
-- **Chat Lokal:** Ollama (`qwen2.5:7b`).
-- **Vision:** Deskripsi gambar menggunakan `llava:7b`.
-- **Dynamic Tooling:** Eksekusi alat secara dinamis dan paralel.
-- **Memori Jangka Panjang:** Ekstraksi dan penyimpanan fakta (`facts.json`).
-- **RAG System:** Pencarian semantik menggunakan FAISS dan `all-MiniLM-L6-v2`.
-- **Auto-Compaction:** Peringkasan konteks otomatis.
-- **Web & Media:** Pencarian web, scraping, dan interaksi web.
+- **Pemrosesan Bahasa Lokal:** Menggunakan model Ollama (`qwen2.5:7b`) untuk pemrosesan teks lokal (offline).
+- **Analisis Visi:** Menganalisis input gambar menggunakan model `llava:7b`.
+- **Eksekusi Alat Otomatis:** Sistem dapat memilih dan mengeksekusi modul fungsi secara dinamis berdasarkan konteks instruksi pengguna.
+- **Manajemen Memori (RAG):** Mengekstrak, menyimpan, dan mencari informasi konteks jangka panjang dari dokumen dan histori obrolan.
+- **Interaksi Eksternal:** Mendukung pencarian web, ekstraksi data situs web, kontrol YouTube, pengamatan layar, dan operasi sistem file.
 
-## Kebutuhan Sistem
+## Limitasi
 
-- RAM Minimal: 16GB
-- Node.js v18+
-- Python 3.10+
-- Ollama terinstal dengan model: `qwen2.5:7b` dan `llava:7b`
+- **Beban Komputasi Perangkat Keras:** Menjalankan model bahasa besar (LLM) dan pemrosesan vektor secara lokal membutuhkan memori RAM yang signifikan (minimal 16GB) dan daya komputasi yang tinggi.
+- **Ketergantungan Arsitektur Ganda:** Memerlukan dua environment yang berjalan bersamaan secara sinkron (Node.js untuk logika utama/UI dan Python untuk server memori RAG).
+- **Stabilitas Pengenalan Suara:** Input suara (Speech-to-Text) belum sepenuhnya stabil pada environment antarmuka saat ini.
 
-## Instalasi dan Eksekusi
+## Instalasi dan Pemasangan
+
+**Prasyarat:** Node.js v18+, Python 3.10+, dan Ollama (dengan model `qwen2.5:7b` dan `llava:7b`).
 
 ```bash
 # 1. Kloning repositori
 git clone https://github.com/Noapllabib06/Project-AI.git
 cd Project-AI
 
-# 2. Instal dependensi Node.js
+# 2. Instalasi Dependensi
 npm install
+python -m venv venv
+.\venv\Scripts\activate
+pip install fastapi uvicorn sentence-transformers faiss-cpu numpy turbovec pydantic
+```
 
-# 3. Konfigurasi Python (Untuk fitur RAG)
-python -m venv .venv
-.venv\Scripts\activate
-pip install fastapi uvicorn sentence-transformers faiss-cpu
+## Panduan Penggunaan
 
-# 4. Jalankan aplikasi
+Gunakan skrip eksekusi simultan untuk menjalankan server memori dan antarmuka secara bersamaan:
+
+```bash
 npm run dev
 ```
 
-Untuk detail arsitektur dan modul, silakan baca [GUIDE.md](GUIDE.md).
+Untuk detail mengenai arsitektur, daftar lengkap dependensi, penjelasan kapabilitas, dan pemecahan masalah, silakan baca [GUIDE.md](GUIDE.md).
