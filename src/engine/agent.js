@@ -28,6 +28,7 @@ const { generateErrorFeedback } = require("./feedback_loop");
 const json_validator = require("./json_validator");
 const axios = require("axios");
 const conversationManager = require("./conversation_manager");
+const configManager = require("./config_manager");
 
 // Muat semua tool dari registry sekali saat startup
 registry.loadAll();
@@ -161,10 +162,14 @@ function emitTrace(onTraceCallback, step) {
 
 class JarvisAgent {
     constructor() {
+        this.modelName = configManager.get('activeModel') || "qwen2.5:7b";
+        let defaultCtx = configManager.get('num_ctx');
+        if (defaultCtx === undefined) defaultCtx = 32000;
+        
         this.model = new ChatOllama({
-            model: "qwen2.5:7b",
+            model: this.modelName,
             temperature: 0.1,
-            num_ctx: 32000,
+            num_ctx: defaultCtx,
         });
 
         this.visionModel = new ChatOllama({
@@ -174,7 +179,7 @@ class JarvisAgent {
         });
         
         this.chatHistory = [];
-        this.maxChatHistory = 15;
+        this.maxChatHistory = 30;
         this.isCompacting = false;
         this.currentState = "Menunggu perintah pengguna (Idle)"; 
         this.lastToolOutput = null;
@@ -188,7 +193,55 @@ class JarvisAgent {
         // sempat kirim conversationId tidak langsung rusak.
         this.activeConversationId = null;
         
-        logger.info('JarvisAgent', 'Agent initialized with Ollama model: qwen2.5:7b');
+        logger.info('JarvisAgent', `Agent initialized with Ollama model: ${this.modelName}`);
+    }
+
+    async _checkModelSize(modelName) {
+        try {
+            const response = await axios.post('http://127.0.0.1:11434/api/show', { name: modelName });
+            const details = response.data.details;
+            if (details && details.parameter_size) {
+                const sizeStr = details.parameter_size.toUpperCase();
+                if (sizeStr.endsWith('B')) {
+                    const num = parseFloat(sizeStr.replace('B', ''));
+                    return num; // returns size in billions
+                }
+            }
+        } catch (e) {
+            logger.warn('JarvisAgent', `Gagal mengecek ukuran model ${modelName}: ${e.message}`);
+        }
+        return 0; // return 0 if failed
+    }
+
+    async reloadModel(newModelName) {
+        if (!newModelName || newModelName === this.modelName) return;
+        
+        logger.info('JarvisAgent', `Reloading main model from ${this.modelName} to ${newModelName}`);
+        
+        // Unload old model to free up VRAM
+        await this._unloadModel(this.modelName);
+        
+        // Cek ukuran model baru
+        const sizeInB = await this._checkModelSize(newModelName);
+        let ctxSize = 32000;
+        
+        if (sizeInB > 9) {
+            logger.warn('JarvisAgent', `Model > 9B terdeteksi (${sizeInB}B). Mengaktifkan Mode Hemat Memori (num_ctx: 4096).`);
+            ctxSize = 4096;
+        } else {
+            logger.info('JarvisAgent', `Model <= 9B terdeteksi (${sizeInB}B). Memakai num_ctx default (32000).`);
+        }
+        
+        configManager.set('num_ctx', ctxSize);
+        
+        this.modelName = newModelName;
+        this.model = new ChatOllama({
+            model: this.modelName,
+            temperature: 0.1,
+            num_ctx: ctxSize,
+        });
+        
+        logger.info('JarvisAgent', `Main model successfully reloaded to ${this.modelName}`);
     }
 
     updateState(newState) {
@@ -313,7 +366,7 @@ Pesan: "${userInput}"`;
         const t0 = startTime || Date.now();
 
         if (retryCount === 0) {
-            await this._unloadModel("llava:7b");
+            await this._unloadModel("llava:7b"); // TODO: Make vision model dynamic if needed
         }
 
         try {
@@ -410,7 +463,7 @@ Pesan: "${userInput}"`;
             emitTrace(onTraceCallback, {
                 type: 'tool_call',
                 retryAttempt: retryCount,
-                tools: toolsToExecute.map(t => ({ tool: t.tool, query: t.query }))
+                tools: toolsToExecute.map(t => ({ ...t }))
             });
 
             const executionPromises = toolsToExecute.map(async (tObj) => {
@@ -448,7 +501,11 @@ Pesan: "${userInput}"`;
                 }
 
                 try {
-                    const execResult = await registry.execute(tName, { query: tQuery });
+                    const execArgs = { ...tObj };
+                    delete execArgs.tool;
+                    if (!execArgs.query) execArgs.query = tQuery;
+                    
+                    const execResult = await registry.execute(tName, execArgs);
 
                     // read_file berhasil -> tampilkan juga isinya di Code Preview
                     // (read-only, tidak butuh konfirmasi karena tidak mengubah apa pun)
@@ -566,6 +623,10 @@ Tugas Anda:
                     // agar chat tidak kotor dengan log eksekusi. Cukup kirim synthesized.
                     finalOutput = synthesized;
                     
+                    this.chatHistory.push({ role: 'user', content: `[SYSTEM_LOG - HASIL TOOL SEBELUMNYA]:\n${rawSynthesisData}` });
+                    this.chatHistory.push({ role: 'assistant', content: JSON.stringify({ tool: 'chat', query: finalOutput }) });
+                    while (this.chatHistory.length > this.maxChatHistory) this.chatHistory.shift();
+                    
                     if (onTokenCallback) onTokenCallback(finalOutput);
                     emitTrace(onTraceCallback, { type: 'done', retryAttempt: retryCount });
                     logger.jarvis(`[synthesized] ${synthesized.substring(0, 200)} (${Date.now() - t0}ms)`);
@@ -580,6 +641,10 @@ Tugas Anda:
                     return fallbackSynthesis;
                 }
             }
+
+            this.chatHistory.push({ role: 'user', content: `[SYSTEM_LOG - HASIL TOOL SEBELUMNYA]:\n${finalOutput}` });
+            this.chatHistory.push({ role: 'assistant', content: JSON.stringify({ tool: 'chat', query: "Selesai eksekusi." }) });
+            while (this.chatHistory.length > this.maxChatHistory) this.chatHistory.shift();
 
             if (onTokenCallback) onTokenCallback(finalOutput.trim());
             emitTrace(onTraceCallback, { type: 'done', retryAttempt: retryCount });
@@ -601,7 +666,7 @@ Tugas Anda:
     async _executeVision(userInput, imageBase64, onTokenCallback) {
         this.updateState('Menganalisis gambar...');
         
-        await this._unloadModel("qwen2.5:7b");
+        await this._unloadModel(this.modelName);
         
         try {
             const promptText = userInput || "Tolong jelaskan secara detail apa yang ada di gambar ini.";

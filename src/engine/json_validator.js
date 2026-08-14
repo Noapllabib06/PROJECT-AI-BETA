@@ -187,13 +187,13 @@ Output Anda yang salah:
 ${aiOutput}
 
 Format yang BENAR (HANYA JSON ATAU ARRAY OF JSON, TANPA teks lain):
-[{"tool": "nama_tool", "query": "isi_query"}]
+[{"tool": "nama_tool", "parameter_tool": "nilai"}]
 
 Contoh Single:
 {"tool": "open_web", "query": "youtube"}
 
-Contoh Multi/Paralel:
-[{"tool": "search_web", "query": "cuaca jakarta"}, {"tool": "play_music", "query": "jazz"}]
+Contoh dengan parameter spesifik:
+{"tool": "check_email", "sender": "paimon", "date": "14/8/2026"}
 
 ATURAN:
 1. HANYA output JSON atau Array of JSON, TANPA penjelasan atau teks naratif

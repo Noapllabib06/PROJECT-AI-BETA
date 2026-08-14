@@ -18,12 +18,12 @@ Berjalan 100% lokal di komputer pengguna menggunakan Ollama (model qwen2.5:7b).`
  * TOOL_DECISION_RULES: Aturan ketat kapan harus menggunakan tool.
  */
 const TOOL_DECISION_RULES = `📋 **ATURAN PENGGUNAAN TOOL (WAJIB):**
+0. **ATURAN MEMBACA EMAIL (PENTING):** Jika pengguna meminta untuk menampilkan ISI PENUH dari sebuah email (misal: "tampilkan isi email dari Arena"), Anda WAJIB memanggil tool \`check_email\` lagi dengan menyertakan parameter \`sender\` DAN \`date\` secara spesifik. Isi penuh email TIDAK ADA di riwayat log biasa, jadi jangan pernah gunakan tool \`chat\` untuk mengarang isi email!
 1. Gunakan tool hanya jika pengguna meminta informasi real-time, data eksternal, atau tindakan di sistem (buka web, putar musik, buat file, dll).
 2. Jika pengguna hanya ngobrol, bertanya opini, atau bertanya pengetahuan umum yang sudah Anda ketahui — JANGAN gunakan tool. Jawab langsung.
-3. Jika Anda memutuskan untuk menggunakan tool, output HANYA JSON valid: {"tool": "nama_tool", "query": "parameter_query"}.
-4. Jika ada beberapa perintah sekaligus (paralel), Anda BISA mengeluarkan ARRAY of JSON: [{"tool": "tool_1", "query": "q1"}, {"tool": "tool_2", "query": "q2"}].
-   JANGAN PERNAH MENGGABUNGKAN array di dalam satu objek seperti {"tool": ["a", "b"], "query": ["x", "y"]}.
-5. Jika Anda memutuskan untuk tidak menggunakan tool (chat biasa), output HANYA JSON: {"tool": "chat", "query": "jawaban_Anda_di_sini"}.
+3. Jika menggunakan tool, output HANYA JSON valid. Struktur dasar: {"tool": "nama_tool"}. Jika tool butuh parameter (seperti "query", "sender", "date"), tambahkan ke JSON: {"tool": "nama_tool", "nama_parameter": "isi_parameter"}.
+4. Jika perintah paralel, keluarkan ARRAY of JSON: [{"tool": "tool_1", "query": "q1"}, {"tool": "tool_2", "query": "q2"}].
+5. Jika tidak menggunakan tool (chat biasa), output HANYA JSON: {"tool": "chat", "query": "jawaban_Anda_di_sini"}.
 6. JANGAN pernah menambahkan teks, markdown, penjelasan, atau roleplay di luar JSON. HANYA JSON.
 7. Jika Anda ragu apakah perlu tool atau tidak, pilih chat ({"tool": "chat", "query": "..."}) daripada memaksa menggunakan tool.
 8. **ATURAN MEMORI KETAT (RAG):** Untuk pertanyaan apa pun terkait fakta masa lalu, preferensi pengguna, data yang disimpan, atau kode/informasi rahasia yang disebutkan sebelumnya, Anda WAJIB SELALU menggunakan tool \`search_memory\` terlebih dahulu. Jangan mengandalkan riwayat obrolan (chat history) Anda untuk menjawab informasi faktual yang harus diingat. Anggap riwayat obrolan Anda mudah menguap, sedangkan \`search_memory\` adalah sumber kebenaran (source of truth) absolut.
@@ -213,17 +213,21 @@ Assistant: {"tool": "take_screenshot", "query": ""}
 User: "tangkap layar 2"
 Assistant: {"tool": "take_screenshot", "query": "layar 2"}`,
 
-    check_email: `✅ (cek email tanpa sebut provider, default gmail):
+    check_email: `✅ (cek email biasa):
 User: "cek email saya"
 Assistant: {"tool": "check_email", "query": ""}
 
-✅ (cek email dengan provider spesifik):
-User: "ada email baru di outlook?"
-Assistant: {"tool": "check_email", "query": "outlook"}
+✅ (cek email dari pengirim spesifik):
+User: "tampilkan email dari paimon"
+Assistant: {"tool": "check_email", "sender": "paimon"}
 
-❌ (jangan pakai search_web untuk cek email pribadi):
+✅ (baca ISI PENUH dari email spesifik):
+User: "Tampilkan isi email dari paimon pada 14/8/2026"
+Assistant: {"tool": "check_email", "sender": "paimon", "date": "14/8/2026"}
+
+❌ (jangan pakai search_web untuk cek email):
 User: "cek gmail saya"
-Assistant: {"tool": "search_web", "query": "gmail"}  // SALAH — ini bukan pencarian web`,
+Assistant: {"tool": "search_web", "query": "gmail"}  // SALAH`,
 };
 
 /**

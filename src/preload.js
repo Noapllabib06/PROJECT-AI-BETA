@@ -92,6 +92,11 @@ contextBridge.exposeInMainWorld('jarvis', {
     /** Konfirmasi simpan draft file dari Code Preview pane ke Desktop */
     confirmSaveFile: (payload) => ipcRenderer.invoke('confirm-save-file', payload),
     
+    // ==================== SETTINGS (BARU) ====================
+    getSettings: () => ipcRenderer.invoke('get-settings'),
+    saveSettings: (settings) => ipcRenderer.invoke('save-settings', settings),
+    getOllamaModels: () => ipcRenderer.invoke('get-ollama-models'),
+    
     // ==================== WINDOW CONTROLS ====================
     
     minimizeWindow: () => ipcRenderer.send('window-minimize'),

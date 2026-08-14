@@ -163,7 +163,7 @@
                 <span class="material-symbols-outlined">dashboard</span>
                 <span>Templates</span>
             </a>
-            <a class="text-on-surface-variant hover:bg-surface-container-high mx-2 my-1 px-4 py-2.5 rounded-lg flex items-center gap-3 transition-colors duration-150" href="#">
+            <a id="settingsBtn" class="text-on-surface-variant hover:bg-surface-container-high mx-2 my-1 px-4 py-2.5 rounded-lg flex items-center gap-3 transition-colors duration-150 cursor-pointer">
                 <span class="material-symbols-outlined">settings</span>
                 <span>Settings</span>
             </a>
@@ -200,7 +200,7 @@
                 </div>
                 <div class="hidden sm:flex items-center gap-2 text-secondary">
                     <span class="material-symbols-outlined text-sm">memory</span>
-                    <span class="font-label-sm text-label-sm">Qwen 2.5 · Local</span>
+                    <span id="activeModelLabel" class="font-label-sm text-label-sm">Qwen 2.5 · Local</span>
                 </div>
             </div>
 
@@ -273,7 +273,7 @@
     </main>
 
     <!-- ============ Code Preview Pane (hidden by default) ============ -->
-    <aside id="codePreview" class="hidden flex-col w-96 lg:w-[520px] border-l border-border-subtle bg-surface-container-lowest h-full z-20 absolute right-0 top-0 shadow-xl md:relative md:shadow-none flex-shrink-0">
+    <aside id="codePreview" class="hidden flex-col w-full md:w-[500px] lg:w-[700px] xl:w-[850px] border-l border-border-subtle bg-surface-container-lowest h-full z-20 absolute right-0 top-0 shadow-xl md:relative md:shadow-none flex-shrink-0">
         <header class="h-14 flex items-center justify-between px-4 border-b border-border-subtle bg-surface flex-shrink-0">
             <span id="codeFileName" class="font-title-md text-title-md font-semibold text-primary truncate">Preview</span>
             <button id="closeCodeBtn" class="p-2 text-secondary hover:text-primary rounded-lg hover:bg-surface-container transition-colors" title="Close Preview">
@@ -355,6 +355,38 @@
             </button>
         </a>
     </template>
+
+    <!-- ============ Settings Modal ============ -->
+    <div id="settingsModal" class="hidden fixed inset-0 bg-black/50 z-50 flex items-center justify-center backdrop-blur-sm transition-opacity">
+        <div class="bg-surface rounded-2xl shadow-xl border border-border-subtle w-full max-w-md mx-4 overflow-hidden flex flex-col">
+            <div class="flex items-center justify-between p-4 border-b border-border-subtle bg-surface-container-low">
+                <h2 class="font-title-md text-title-md font-semibold flex items-center gap-2 text-on-surface">
+                    <span class="material-symbols-outlined">settings</span> Settings
+                </h2>
+                <button id="closeSettingsBtn" class="text-secondary hover:text-error transition-colors p-1 rounded-lg">
+                    <span class="material-symbols-outlined">close</span>
+                </button>
+            </div>
+            <div class="p-5 space-y-4">
+                <div class="space-y-2">
+                    <label class="block font-label-sm text-label-sm text-on-surface-variant">Active Local Model (Ollama)</label>
+                    <div class="flex items-center gap-2">
+                        <select id="modelSelect" class="w-full bg-surface-container border border-border-subtle rounded-lg px-3 py-2 text-body-md focus:outline-none focus:ring-2 focus:ring-action-orange-vibrant/50 appearance-none text-on-surface">
+                            <option value="">Loading models...</option>
+                        </select>
+                        <button id="refreshModelsBtn" class="p-2 bg-surface-container-high border border-border-subtle rounded-lg text-secondary hover:text-primary transition-colors flex-shrink-0" title="Refresh Models">
+                            <span class="material-symbols-outlined text-[20px]">refresh</span>
+                        </button>
+                    </div>
+                    <p class="text-[12px] text-secondary mt-1">Select an AI model installed in your local Ollama instance.</p>
+                </div>
+            </div>
+            <div class="p-4 border-t border-border-subtle bg-surface-container-low flex justify-end gap-3">
+                <button id="cancelSettingsBtn" class="px-4 py-2 rounded-lg font-label-sm text-secondary hover:bg-surface-container-high transition-colors">Batal</button>
+                <button id="saveSettingsBtn" class="px-4 py-2 rounded-lg font-label-sm bg-action-orange-vibrant text-white hover:brightness-110 transition-colors shadow-sm">Simpan</button>
+            </div>
+        </div>
+    </div>
 
     <!-- ============ Scripts ============ -->
     <script src="lib/prism.js"></script>

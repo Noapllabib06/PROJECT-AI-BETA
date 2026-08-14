@@ -40,6 +40,15 @@ const aiMessageTemplate = document.getElementById('aiMessageTemplate');
 const userMessageTemplate = document.getElementById('userMessageTemplate');
 const conversationItemTemplate = document.getElementById('conversationItemTemplate');
 
+const activeModelLabel = document.getElementById('activeModelLabel');
+const settingsBtn = document.getElementById('settingsBtn');
+const settingsModal = document.getElementById('settingsModal');
+const closeSettingsBtn = document.getElementById('closeSettingsBtn');
+const cancelSettingsBtn = document.getElementById('cancelSettingsBtn');
+const saveSettingsBtn = document.getElementById('saveSettingsBtn');
+const modelSelect = document.getElementById('modelSelect');
+const refreshModelsBtn = document.getElementById('refreshModelsBtn');
+
 // ===================== STATE =====================
 const TOOL_LABELS = {
     search_web: 'Web', read_webpage: 'Web', open_website: 'Web',
@@ -81,6 +90,64 @@ toggleCodeBtn?.addEventListener('click', () => {
 closeCodeBtn?.addEventListener('click', () => {
     codePreview.classList.add('hidden');
     codePreview.classList.remove('flex');
+});
+
+// ===================== SETTINGS MODAL =====================
+async function loadSettings() {
+    const settings = await window.jarvis.getSettings();
+    if (settings && settings.activeModel) {
+        activeModelLabel.textContent = `${settings.activeModel} · Local`;
+        modelSelect.value = settings.activeModel;
+    }
+}
+
+async function fetchOllamaModels() {
+    modelSelect.innerHTML = '<option value="">Loading models...</option>';
+    modelSelect.disabled = true;
+    try {
+        const models = await window.jarvis.getOllamaModels();
+        modelSelect.innerHTML = '';
+        if (models.length === 0) {
+            modelSelect.innerHTML = '<option value="">No models found in Ollama</option>';
+        } else {
+            models.forEach(model => {
+                const opt = document.createElement('option');
+                opt.value = model.name;
+                opt.textContent = model.name;
+                modelSelect.appendChild(opt);
+            });
+        }
+        await loadSettings(); // Re-select active model after populating
+    } catch (e) {
+        modelSelect.innerHTML = '<option value="">Error fetching models</option>';
+    } finally {
+        modelSelect.disabled = false;
+    }
+}
+
+settingsBtn?.addEventListener('click', () => {
+    settingsModal.classList.remove('hidden');
+    fetchOllamaModels();
+});
+
+const closeSettings = () => settingsModal.classList.add('hidden');
+closeSettingsBtn?.addEventListener('click', closeSettings);
+cancelSettingsBtn?.addEventListener('click', closeSettings);
+
+refreshModelsBtn?.addEventListener('click', fetchOllamaModels);
+
+saveSettingsBtn?.addEventListener('click', async () => {
+    const selectedModel = modelSelect.value;
+    if (selectedModel) {
+        await window.jarvis.saveSettings({ activeModel: selectedModel });
+        activeModelLabel.textContent = `${selectedModel} · Local`;
+    }
+    closeSettings();
+});
+
+// Initial Load
+document.addEventListener('DOMContentLoaded', () => {
+    loadSettings();
 });
 
 // ===================== TEXTAREA AUTO-RESIZE =====================
@@ -158,31 +225,74 @@ function expandCodeSidebar() {
 
 /**
  * Render draft file (dari create_file yang di-intercept) — bisa diedit,
- * ada tombol Simpan (tulis ke disk via confirmSaveFile) dan Batalkan.
+ * ada tombol Konfirmasi (tulis ke disk via confirmSaveFile) dan Batalkan.
  */
 function renderFileDraft(filename, content) {
     expandCodeSidebar();
     codeFileName.textContent = filename;
     codeContentInner.innerHTML = '';
 
+    if (filename === 'snippet.image' || filename.endsWith('.png') || filename.endsWith('.jpg')) {
+        try {
+            const data = JSON.parse(content);
+            const container = document.createElement('div');
+            container.className = 'flex flex-col h-full gap-4 overflow-y-auto p-4';
+            
+            if (data.path || data.image) {
+                const img = document.createElement('img');
+                img.src = data.path ? `file:///${data.path.replace(/\\/g, '/')}` : data.image;
+                img.className = 'max-w-full rounded-lg border border-border-subtle shadow-sm object-contain';
+                container.appendChild(img);
+            }
+            
+            if (data.explanation) {
+                const text = document.createElement('div');
+                text.className = 'text-on-surface font-body-md whitespace-pre-wrap';
+                text.textContent = data.explanation;
+                container.appendChild(text);
+            }
+            
+            codeContentInner.appendChild(container);
+            return;
+        } catch (e) {
+            // Fallback if not valid JSON
+            console.error("Gagal parse image snippet JSON", e);
+        }
+    }
+    
+    const container = document.createElement('div');
+    container.className = 'flex flex-col h-full gap-3';
+    codeContentInner.appendChild(container);
+
     const textarea = document.createElement('textarea');
-    textarea.className = 'code-editor';
+    textarea.className = 'code-editor flex-1';
     textarea.value = content;
-    codeContentInner.appendChild(textarea);
+    container.appendChild(textarea);
+
+    const actionsRow = document.createElement('div');
+    actionsRow.className = 'flex items-center justify-between w-full pb-2';
+
+    const statusMsg = document.createElement('div');
+    statusMsg.className = 'text-sm font-medium';
 
     const actions = document.createElement('div');
-    actions.className = 'flex gap-2 mt-3';
+    actions.className = 'flex gap-2 justify-end';
 
     const saveBtn = document.createElement('button');
-    saveBtn.className = 'px-4 py-2 bg-green-600 text-white rounded-lg text-sm font-semibold hover:bg-green-700 transition-colors';
-    saveBtn.textContent = 'Simpan';
+    saveBtn.className = 'px-4 py-2 bg-primary text-white rounded-lg text-sm font-semibold hover:bg-primary-hover transition-colors';
+    saveBtn.textContent = 'Konfirmasi';
 
     const discardBtn = document.createElement('button');
     discardBtn.className = 'px-4 py-2 bg-surface-container-high text-on-surface rounded-lg text-sm font-medium hover:bg-surface-dim transition-colors';
     discardBtn.textContent = 'Batalkan';
 
-    const statusMsg = document.createElement('div');
-    statusMsg.className = 'text-sm mt-2';
+    actions.appendChild(discardBtn);
+    actions.appendChild(saveBtn);
+    
+    actionsRow.appendChild(statusMsg);
+    actionsRow.appendChild(actions);
+
+    container.appendChild(actionsRow);
 
     saveBtn.addEventListener('click', async () => {
         saveBtn.disabled = true;
@@ -193,63 +303,32 @@ function renderFileDraft(filename, content) {
         });
 
         if (result?.success) {
-            statusMsg.textContent = `✅ Tersimpan di ${result.filePath} (${result.sizeKB} KB)`;
-            statusMsg.className = 'text-sm mt-2 text-green-600';
-            textarea.disabled = true;
-            saveBtn.remove();
-            discardBtn.textContent = 'Tutup';
+            statusMsg.textContent = `✅ Tersimpan di ${result.filePath}`;
+            statusMsg.className = 'text-sm text-green-600 font-medium';
+            saveBtn.textContent = 'Tersimpan';
+            setTimeout(() => {
+                saveBtn.disabled = false;
+                saveBtn.textContent = 'Konfirmasi';
+            }, 2000);
         } else {
             statusMsg.textContent = `❌ Gagal menyimpan: ${result?.error || 'unknown error'}`;
-            statusMsg.className = 'text-sm mt-2 text-error';
+            statusMsg.className = 'text-sm text-error font-medium';
             saveBtn.disabled = false;
-            saveBtn.textContent = 'Simpan';
+            saveBtn.textContent = 'Konfirmasi';
         }
     });
 
     discardBtn.addEventListener('click', () => {
         clearCodePreview();
     });
-
-    actions.appendChild(saveBtn);
-    actions.appendChild(discardBtn);
-    codeContentInner.appendChild(actions);
-    codeContentInner.appendChild(statusMsg);
 }
 
 /**
- * Render isi file hasil read_file — read-only, tanpa tombol simpan.
+ * Render isi file hasil read_file — sekarang juga editable
+ * dan memiliki opsi untuk Konfirmasi (simpan) atau Batalkan.
  */
 function renderFileView(filename, content) {
-    expandCodeSidebar();
-    codeFileName.textContent = filename;
-    codeContentInner.innerHTML = '';
-
-    // Determine language from filename extension
-    let lang = 'javascript';
-    const extMatch = filename.match(/\.([a-z0-9]+)$/i);
-    if (extMatch) {
-        const ext = extMatch[1].toLowerCase();
-        const map = {
-            'js': 'javascript', 'html': 'html', 'css': 'css',
-            'py': 'python', 'json': 'json', 'md': 'markdown'
-        };
-        lang = map[ext] || ext;
-    }
-
-    const pre = document.createElement('pre');
-    pre.className = 'code-view';
-
-    const codeEl = document.createElement('code');
-    codeEl.className = `language-${lang}`;
-    codeEl.textContent = content;
-
-    pre.appendChild(codeEl);
-    codeContentInner.appendChild(pre);
-
-    // Apply Prism highlighting
-    if (window.Prism) {
-        Prism.highlightElement(codeEl);
-    }
+    renderFileDraft(filename, content);
 }
 
 function clearCodePreview() {
@@ -270,12 +349,12 @@ function escapeHtml(text) {
 let codeSnippetCounter = 0;
 
 function extractCodeBlocksAsCards(text) {
-    const codeBlockRegex = /```(\w+)?\n([\s\S]*?)```/g;
+    const codeBlockRegex = /```([^\r\n]*?)\r?\n([\s\S]*?)```/g;
     let cardsHtml = [];
     const cleanedText = text.replace(codeBlockRegex, (match, lang, code) => {
         codeSnippetCounter++;
         const id = `snippet-${codeSnippetCounter}-${Date.now()}`;
-        const language = lang || 'text';
+        const language = lang ? lang.trim() : 'text';
         cardsHtml.push({ id, language, code: code.trim() });
         return `__CODE_CARD_${id}__`;
     });

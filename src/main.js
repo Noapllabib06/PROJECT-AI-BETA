@@ -7,6 +7,8 @@ const os = require('os');
 //const { spawn } = require('child_process');
 const agent = require('./engine/agent');
 const conversationManager = require('./engine/conversation_manager');
+const configManager = require('./engine/config_manager');
+const axios = require('axios');
 const { open_web_tool, scrape_web_tool, search_web_tool } = require('./tools/web_tools');
 const { yt_search_tool, play_youtube_music, play_youtube_video, getVideoInfo } = require('./tools/yt_tools');
 
@@ -156,6 +158,35 @@ ipcMain.handle('switch-conversation', async (event, conversationId) => {
     } catch (error) {
         console.error("Switch Conversation Error:", error);
         return { success: false };
+    }
+});
+
+// ============ SETTINGS IPC HANDLERS ============
+
+ipcMain.handle('get-settings', async () => {
+    return configManager.getAll();
+});
+
+ipcMain.handle('save-settings', async (event, settings) => {
+    try {
+        if (settings.activeModel) {
+            configManager.set('activeModel', settings.activeModel);
+            await agent.reloadModel(settings.activeModel);
+        }
+        return { success: true };
+    } catch (error) {
+        console.error("Save Settings Error:", error);
+        return { success: false, error: error.message };
+    }
+});
+
+ipcMain.handle('get-ollama-models', async () => {
+    try {
+        const response = await axios.get('http://127.0.0.1:11434/api/tags');
+        return response.data.models || [];
+    } catch (error) {
+        console.error("Failed to fetch Ollama models:", error.message);
+        return [];
     }
 });
 

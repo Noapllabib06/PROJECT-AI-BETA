@@ -39,13 +39,13 @@ const credentialManager = require('../utils/credentials');
 
 // imap-simple bersifat opsional — jika belum di-install, tool ini
 // akan mengembalikan pesan error yang jelas, bukan crash seluruh app.
-// Catatan: mailparser TIDAK diperlukan lagi — imap-simple sudah otomatis
-// mem-parsing HEADER jadi object, jadi tidak perlu parsing manual lagi.
 let imaps = null;
+let simpleParser = null;
 try {
     imaps = require('imap-simple');
+    simpleParser = require('mailparser').simpleParser;
 } catch (e) {
-    logger.warn('EmailTools', 'Package "imap-simple" belum terinstall. Jalankan: npm install imap-simple');
+    logger.warn('EmailTools', 'Package "imap-simple" atau "mailparser" belum terinstall. Jalankan: npm install imap-simple mailparser');
 }
 
 // ===================== KNOWN PROVIDER HOSTS =====================
@@ -79,8 +79,8 @@ function detectHostFromEmail(emailAddress) {
 
 // ===================== INTERNAL TOOL LOGIC =====================
 
-async function checkEmailTool(query = '') {
-    logger.tool('checkEmailTool', `Input: "${query}"`);
+async function checkEmailTool(query = '', sender = '', date = '') {
+    logger.tool('checkEmailTool', `Input: query="${query}", sender="${sender}", date="${date}"`);
 
     if (!imaps) {
         return {
@@ -126,35 +126,131 @@ async function checkEmailTool(query = '') {
         const connection = await imaps.connect(config);
         await connection.openBox('INBOX');
 
-        // 4. Ambil email UNSEEN (belum dibaca), maksimal 5 terbaru
-        const searchCriteria = ['UNSEEN'];
+        // 4. Ambil header email agar ringan
+        let searchCriteria = ['ALL'];
+        if (sender) {
+            searchCriteria.push(['FROM', sender]);
+        } else {
+            searchCriteria.push('UNSEEN');
+        }
+
         const fetchOptions = { bodies: ['HEADER'], markSeen: false };
         const messages = await connection.search(searchCriteria, fetchOptions);
 
+        if (!messages || messages.length === 0) {
+            connection.end();
+            return { success: true, data: `📭 Tidak ada email ditemukan di **${providerKey}** (${cred.username}).` };
+        }
+
+        const maxEmails = sender ? 2 : 5;
+        const recent = messages.slice(-maxEmails).reverse(); // terbaru
+        
+        // 5. Fetch full body hanya untuk email terbaru
+        const uidsNum = recent.map(m => m.attributes.uid);
+        const fullFetchOptions = { bodies: [''], markSeen: false };
+        let fullMessages = [];
+        if (uidsNum.length > 0) {
+            const minUid = Math.min(...uidsNum);
+            const maxUid = Math.max(...uidsNum);
+            fullMessages = await connection.search([['UID', `${minUid}:${maxUid}`]], fullFetchOptions);
+        }
         connection.end();
 
-        if (!messages || messages.length === 0) {
-            return { success: true, data: `📭 Tidak ada email belum dibaca di **${providerKey}** (${cred.username}).` };
-        }
+        let result = `📧 **${messages.length} Email Ditemukan** (${providerKey} — ${cred.username})\n\n`;
 
-        const recent = messages.slice(-5).reverse(); // 5 terbaru
-        let result = `📧 **${messages.length} Email Belum Dibaca** (${providerKey} — ${cred.username})\n\n`;
+        const fs = require('fs');
+        const path = require('path');
+        const os = require('os');
 
         for (const msg of recent) {
-            const headerPart = msg.parts.find(p => p.which === 'HEADER');
-            // PENTING: imap-simple SUDAH otomatis parsing HEADER jadi object
-            // (bukan raw string), jadi TIDAK perlu mailparser di sini lagi.
-            // Format headerPart.body: { subject: [...], from: [...], date: [...] }
-            const header = headerPart.body || {};
-            const subject = header.subject ? header.subject[0] : '(Tanpa subjek)';
-            const from = header.from ? header.from[0] : 'Tidak diketahui';
-            const rawDate = header.date ? header.date[0] : null;
-            const date = rawDate ? new Date(rawDate).toLocaleString('id-ID') : '-';
-            result += `📌 **${subject}**\n👤 Dari: ${from}\n🕐 ${date}\n\n`;
+            const uid = msg.attributes.uid;
+            const fullMsg = fullMessages.find(m => m.attributes.uid === uid);
+            let subject = '(Tanpa subjek)';
+            let from = 'Tidak diketahui';
+            let dateStr = '-';
+            let textBody = '(Isi pesan tidak dapat dimuat)';
+            let imagePaths = [];
+            
+            // Try mailparser if available and we have the full message body
+            if (fullMsg) {
+                const bodyPart = fullMsg.parts.find(p => p.which === '');
+                if (simpleParser && bodyPart && bodyPart.body) {
+                    try {
+                        const parsed = await simpleParser(bodyPart.body);
+                        subject = parsed.subject || subject;
+                        from = parsed.from ? parsed.from.text : from;
+                        dateStr = parsed.date ? new Date(parsed.date).toLocaleString('id-ID') : dateStr;
+                        textBody = parsed.text || parsed.textAsHtml || '(Hanya HTML atau attachment)';
+                        
+                        // Coba ekstrak dari HTML jika teks aslinya terlalu pendek (biasa terjadi di email promosi/marketing)
+                        if (parsed.html) {
+                            let htmlText = parsed.html.replace(/<style[^>]*>[\s\S]*?<\/style>/gi, '') // Hapus blok style
+                                                      .replace(/<script[^>]*>[\s\S]*?<\/script>/gi, '') // Hapus blok script
+                                                      .replace(/<[^>]+>/g, ' ') // Hapus semua tag HTML
+                                                      .replace(/&nbsp;/g, ' ') // Bersihkan entitas HTML umum
+                                                      .replace(/\s+/g, ' ') // Rapikan spasi berlebih
+                                                      .trim();
+                            if (htmlText.length > textBody.length) {
+                                textBody = htmlText;
+                            }
+                        }
+                        if (parsed.attachments && parsed.attachments.length > 0) {
+                            for (const att of parsed.attachments) {
+                                if (att.contentType && att.contentType.startsWith('image/')) {
+                                    const safeName = (att.filename || 'img.png').replace(/[^a-z0-9.]/gi, '_');
+                                    const tmpPath = path.join(os.tmpdir(), `email_img_${Date.now()}_${safeName}`);
+                                    fs.writeFileSync(tmpPath, att.content);
+                                    imagePaths.push(tmpPath);
+                                }
+                            }
+                        }
+
+                        // Clean up and truncate long emails
+                        textBody = textBody.trim();
+                        
+                        // Hide very long URLs (tracking links) to prevent "luber" output
+                        textBody = textBody.replace(/https?:\/\/[^\s\]\)>]+/gi, (url) => {
+                            return url.length > 60 ? '[Tautan Panjang Disembunyikan]' : url;
+                        });
+
+                        if (textBody.length > 1500) {
+                            textBody = textBody.substring(0, 1500) + '... [Teks dipotong]';
+                        }
+                    } catch (err) {
+                        logger.error('EmailTools', 'Gagal parsing isi email: ' + err.message);
+                    }
+                }
+            }
+            
+            // Fallback to headers if parsing fails
+            if (subject === '(Tanpa subjek)') {
+                const headerPart = msg.parts.find(p => p.which === 'HEADER');
+                const header = headerPart?.body || {};
+                subject = header.subject ? header.subject[0] : '(Tanpa subjek)';
+                from = header.from ? header.from[0] : 'Tidak diketahui';
+                const rawDate = header.date ? header.date[0] : null;
+                dateStr = rawDate ? new Date(rawDate).toLocaleString('id-ID') : '-';
+            }
+
+            const isFullView = Boolean(sender && date);
+            
+            if (isFullView) {
+                result += `📌 **${subject}**\n👤 Dari: ${from}\n🕐 ${dateStr}\n📄 Isi:\n${textBody}\n\n`;
+                if (imagePaths.length > 0) {
+                    result += `🖼️ **Gambar terlampir:**\n`;
+                    for (const imgPath of imagePaths) {
+                        const safePath = imgPath.replace(/\\/g, '\\\\');
+                        result += `(Terdapat gambar terlampir di email. Untuk menampilkan gambar tersebut ke pengguna di UI Code Preview, gunakan format code block berikut di respons chat Anda:\n\`\`\`snippet.image\n{"path": "${safePath}", "explanation": "Gambar dari email: ${subject}"}\n\`\`\`\n)\n`;
+                    }
+                }
+            } else {
+                result += `📌 **${subject}**\n👤 Dari: ${from}\n🕐 ${dateStr}\n*(Gunakan parameter sender dan date spesifik pada tool check_email untuk membaca isi penuh email ini)*\n`;
+            }
+            result += `---\n\n`;
         }
 
-        if (messages.length > 5) {
-            result += `_...dan ${messages.length - 5} email lainnya._`;
+        if (messages.length > maxEmails) {
+            result += `_...dan ${messages.length - maxEmails} email lainnya._`;
         }
 
         logger.tool('checkEmailTool', `Berhasil: ${messages.length} email unread ditemukan`);
@@ -182,12 +278,20 @@ const emailTools = [
                 query: {
                     type: 'string',
                     description: 'Opsional. Sebutkan provider jika bukan gmail, misal "outlook", "yahoo". Kosongkan untuk default gmail.'
+                },
+                sender: {
+                    type: 'string',
+                    description: 'Opsional. Nama atau email pengirim jika user meminta untuk mencari email dari pengirim tertentu (misal: "fab").'
+                },
+                date: {
+                    type: 'string',
+                    description: 'Opsional. Tanggal spesifik email jika user meminta membaca isi penuh dari satu email spesifik (misal: "14/8/2026"). Wajib diisi bersamaan dengan sender untuk menampilkan isi email.'
                 }
             },
             required: []
         },
         execute: async (args) => {
-            const result = await checkEmailTool(args.query || '');
+            const result = await checkEmailTool(args.query || '', args.sender || '', args.date || '');
             if (result.success) {
                 return { success: true, data: result.data };
             }
