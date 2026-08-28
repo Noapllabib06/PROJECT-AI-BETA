@@ -280,8 +280,11 @@
                 <span class="material-symbols-outlined">close</span>
             </button>
         </header>
-        <div id="codeContentInner" class="flex-1 p-4 overflow-y-auto">
-            <div class="code-placeholder bg-surface-gray rounded-lg border border-border-subtle h-full p-4 flex items-center justify-center text-secondary font-body-md">
+        <nav id="codeTabBar" class="hidden flex overflow-x-auto border-b border-border-subtle bg-surface-container-lowest min-h-[40px] px-2 pt-2 gap-1 items-end flex-shrink-0 custom-scrollbar">
+            <!-- Tabs will be injected here -->
+        </nav>
+        <div id="codeContentInner" class="flex-1 overflow-y-auto relative bg-surface-container-lowest">
+            <div id="codePlaceholder" class="absolute inset-4 bg-surface-gray rounded-lg border border-border-subtle flex items-center justify-center text-secondary font-body-md">
                 No active preview available.
             </div>
         </div>

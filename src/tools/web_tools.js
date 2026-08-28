@@ -209,10 +209,9 @@ function open_web_tool(input) {
             if (location && location.length > 2) {
                 const encodedLocation = encodeURIComponent(location);
                 const mapSearchUrl = `https://www.google.com/maps/search/${encodedLocation}`;
-                const command = process.platform === 'win32' ? `start "" "${mapSearchUrl}"` : `open "${mapSearchUrl}"`;
-                exec(command, (error) => { if (error) logger.error('open_web_tool', `exec error: ${error.message}`); });
+                const jsonPayload = JSON.stringify({ url: mapSearchUrl, title: `Maps: ${location}` });
                 logger.tool('open_web_tool', `Map search URL: ${mapSearchUrl}`);
-                return `✅ Membuka lokasi ${location} di Google Maps...`;
+                return `✅ Membuka lokasi ${location} di Google Maps...\n\n\`\`\`snippet.web\n${jsonPayload}\n\`\`\``;
             }
         }
         if (isArticleTitle(input)) {
@@ -231,15 +230,13 @@ function open_web_tool(input) {
         const url = normalizeUrl(input);
         if (url) {
             logger.tool('open_web_tool', `Normalized URL: ${url}`);
-            const command = process.platform === 'win32' ? `start "" "${url}"` : `open "${url}"`;
-            exec(command, (error) => { if (error) logger.error('open_web_tool', `exec error: ${error.message}`); }); 
-            return `✅ Membuka ${url} di browser.`;
+            const jsonPayload = JSON.stringify({ url: url, title: cleanedInput });
+            return `✅ **Membuka Halaman Web di Jarvis**\n🔗 ${url}\n\n\`\`\`snippet.web\n${jsonPayload}\n\`\`\``;
         } else {
-            const searchQuery = encodeURIComponent(input.replace(/^(buka|open|browse)\s+/i, ''));
+            const searchQuery = encodeURIComponent(cleanedInput);
             const searchUrl = `https://www.google.com/search?q=${searchQuery}`;
-            const command = process.platform === 'win32' ? `start "" "${searchUrl}"` : `open "${searchUrl}"`;
-            exec(command);
-            return `🔍 Mencari "${input.replace(/^(buka|open|browse)\s+/i, '')}" di Google...\n✅ Membuka hasil pencarian.`;
+            const jsonPayload = JSON.stringify({ url: searchUrl, title: `Search: ${cleanedInput}` });
+            return `🔍 Mencari "${cleanedInput}" di Google...\n✅ Membuka hasil pencarian.\n\n\`\`\`snippet.web\n${jsonPayload}\n\`\`\``;
         }
     } catch (error) {
         logger.error('open_web_tool', error);

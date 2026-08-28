@@ -76,15 +76,8 @@ function validateToolCall(jsonArray) {
         return { valid: false, error: 'Output bukan array' };
     }
 
-    const validTools = [
-        'open_web', 'search_web', 'scrape_web',
-        'play_music', 'play_video', 'search_youtube',
-        'save_credential', 'list_credentials', 'delete_credential',
-        'create_file', 'read_file', 'ingest_codebase', 'research_and_summarize', 'open_website', 'read_webpage', 'open_youtube_channel',
-        'save_memory', 'search_memory','open_app', 'control_volume',
-        'take_screenshot', 'check_email',
-        'chat'
-    ];
+    const registry = require('../tools/registry');
+    const validTools = [...registry.getToolNames(), 'chat'];
 
     const validatedData = [];
 

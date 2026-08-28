@@ -56,3 +56,5 @@ memory_index.bin
 .jarvis-conversations/
 .jarvis-config.json
 venv/
+vllm-env/
+vllm-env-311/

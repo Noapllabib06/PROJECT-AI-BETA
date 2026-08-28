@@ -15,6 +15,7 @@
 
 const { exec } = require('child_process');
 const logger = require('../utils/logger');
+const si = require('systeminformation');
 
 // loudness bersifat opsional — jika belum di-install, fitur volume
 // akan mengembalikan pesan error yang jelas, bukan crash seluruh app.
@@ -247,12 +248,89 @@ async function controlVolumeTool(query) {
     }
 }
 
+// ===================== SYSTEM INFO TOOLS =====================
+
+async function systemMonitorTool() {
+    try {
+        const mem = await si.mem();
+        const cpu = await si.currentLoad();
+        const cpuTemp = await si.cpuTemperature();
+        const os = await si.osInfo();
+        
+        let report = `📊 **Laporan Sistem (Real-time)**\n`;
+        report += `- OS: ${os.distro} ${os.release}\n`;
+        report += `- CPU Load: ${cpu.currentLoad.toFixed(2)}%\n`;
+        report += `- CPU Temp: ${cpuTemp.main ? cpuTemp.main + '°C' : 'Tidak tersedia'}\n`;
+        report += `- RAM Terpakai: ${(mem.used / 1024 / 1024 / 1024).toFixed(2)} GB dari ${(mem.total / 1024 / 1024 / 1024).toFixed(2)} GB (${((mem.used / mem.total) * 100).toFixed(1)}%)\n`;
+        
+        return report;
+    } catch (e) {
+        logger.error('systemMonitorTool', e);
+        return `❌ Gagal mengambil data sistem: ${e.message}`;
+    }
+}
+
+async function batteryStatusTool() {
+    try {
+        const battery = await si.battery();
+        if (!battery.hasBattery) {
+            return `🔋 Perangkat ini tidak memiliki baterai (mungkin PC Desktop).`;
+        }
+        let report = `🔋 **Status Baterai**\n`;
+        report += `- Persentase: ${battery.percent}%\n`;
+        report += `- Sedang Di-charge: ${battery.isCharging ? 'Ya ⚡' : 'Tidak'}\n`;
+        if (!battery.isCharging && battery.timeRemaining) {
+            report += `- Sisa Waktu: ${battery.timeRemaining} menit\n`;
+        }
+        return report;
+    } catch (e) {
+        return `❌ Gagal mengambil data baterai: ${e.message}`;
+    }
+}
+
+async function diskSpaceTool() {
+    try {
+        const disks = await si.fsSize();
+        let report = `💾 **Informasi Penyimpanan (Disk)**\n`;
+        for (const disk of disks) {
+            report += `- Drive ${disk.mount}:\n`;
+            report += `  - Terpakai: ${(disk.used / 1024 / 1024 / 1024).toFixed(2)} GB (${disk.use}%)\n`;
+            report += `  - Sisa: ${((disk.size - disk.used) / 1024 / 1024 / 1024).toFixed(2)} GB\n`;
+            report += `  - Total: ${(disk.size / 1024 / 1024 / 1024).toFixed(2)} GB\n`;
+        }
+        return report;
+    } catch (e) {
+        return `❌ Gagal mengambil data disk: ${e.message}`;
+    }
+}
+
+async function networkInfoTool() {
+    try {
+        const netInterfaces = await si.networkInterfaces();
+        const defaultInterface = await si.networkInterfaceDefault();
+        const active = netInterfaces.find(n => n.iface === defaultInterface);
+        
+        let report = `🌐 **Informasi Jaringan**\n`;
+        if (active) {
+            report += `- Interface Aktif: ${active.ifaceName || active.iface}\n`;
+            report += `- IPv4: ${active.ip4}\n`;
+            report += `- MAC: ${active.mac}\n`;
+        } else {
+            report += `- Tidak ada antarmuka jaringan aktif yang terdeteksi.\n`;
+        }
+        return report;
+    } catch (e) {
+        return `❌ Gagal mengambil data jaringan: ${e.message}`;
+    }
+}
+
 // ===================== REGISTRY TOOLS =====================
 
 const systemControlTools = [
     {
         name: 'open_app',
         description: 'Membuka aplikasi desktop lokal (bukan situs web). Contoh: "buka notepad", "buka word", "buka spotify", "buka file explorer".',
+        keywords: ['buka aplikasi', 'buka app', 'jalankan aplikasi', 'open app'],
         parameters: {
             type: 'object',
             properties: {
@@ -271,6 +349,7 @@ const systemControlTools = [
     {
         name: 'control_volume',
         description: 'Mengontrol volume suara sistem: naik, turun, set ke persentase tertentu, mute, atau unmute. Contoh: "naikkan volume", "set volume ke 50", "mute".',
+        keywords: ['volume', 'suara', 'audio', 'besarkan suara', 'kecilkan suara', 'mute'],
         parameters: {
             type: 'object',
             properties: {
@@ -284,6 +363,42 @@ const systemControlTools = [
         execute: async (args) => {
             const result = await controlVolumeTool(args.query || '');
             return { success: true, data: result };
+        }
+    },
+    {
+        name: 'system_monitor',
+        description: 'Mengecek metrik sistem saat ini seperti penggunaan RAM, CPU, dan OS.',
+        keywords: ['status sistem', 'penggunaan ram', 'suhu cpu', 'monitor sistem', 'gpu', 'cpu', 'ram'],
+        parameters: { type: 'object', properties: {} },
+        execute: async () => {
+            return { success: true, data: await systemMonitorTool() };
+        }
+    },
+    {
+        name: 'battery_status',
+        description: 'Mengecek status baterai perangkat, persentase, dan apakah sedang diisi daya.',
+        keywords: ['status baterai', 'sisa baterai', 'persen baterai', 'baterai laptop', 'battery'],
+        parameters: { type: 'object', properties: {} },
+        execute: async () => {
+            return { success: true, data: await batteryStatusTool() };
+        }
+    },
+    {
+        name: 'disk_space',
+        description: 'Mengecek kapasitas penyimpanan disk lokal (sisa memori/storage di hard drive/SSD).',
+        keywords: ['sisa penyimpanan', 'disk space', 'ruang hardisk', 'penyimpanan sisa', 'sisa disk'],
+        parameters: { type: 'object', properties: {} },
+        execute: async () => {
+            return { success: true, data: await diskSpaceTool() };
+        }
+    },
+    {
+        name: 'network_info',
+        description: 'Mengecek informasi jaringan saat ini, seperti IP lokal dan adapter yang digunakan.',
+        keywords: ['status jaringan', 'koneksi internet', 'kecepatan internet', 'ping', 'ip address', 'wifi'],
+        parameters: { type: 'object', properties: {} },
+        execute: async () => {
+            return { success: true, data: await networkInfoTool() };
         }
     }
 ];

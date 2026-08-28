@@ -19,7 +19,8 @@
  *   menampilkan panel "Thinking Process" yang detail.
  */
 
-const { ChatOllama } = require("@langchain/ollama");
+const { ChatOllama, OllamaEmbeddings } = require("@langchain/ollama");
+const { ChatOpenAI } = require("@langchain/openai");
 const _prompt = require("./prompt.js");
 const { PERSONA } = _prompt;
 const logger = require("../utils/logger");
@@ -34,56 +35,6 @@ const configManager = require("./config_manager");
 registry.loadAll();
 
 // ===================== DYNAMIC TOOL ROUTING =====================
-const TOOL_CATEGORIES = {
-    WEB: {
-        keywords: ['cari', 'berita', 'web', 'google', 'search', 
-                   'info', 'informasi', 'tentang', 'apa itu', 'siapa', 'kapan', 'dimana', 'mengapa',
-                   'buka', 'open', 'website', 'situs', 'halaman', 'browser', 'maps', 'lokasi',
-                   'alamat', 'berikan'],
-        tools: ['search_web', 'open_website', 'read_webpage', 'research_and_summarize']
-    },
-    MEDIA: {
-        keywords: ['putar', 'lagu', 'video', 'tutorial', 'youtube', 'musik', 'music', 'play', 
-                   'nonton', 'tonton', 'dengerin', 'dengarkan', 'mainkan', 'stream',
-                   'channel', 'chanel', 'kanal'],
-        tools: ['search_youtube', 'play_music', 'play_video', 'open_youtube_channel']
-    },
-    FILE: {
-        keywords: ['berkas', 'file', 'tulis', 'baca', 'kode', 'catatan', 'dokumen', 'document',
-                   'buka file', 'folder', 'proyek', 'project', 'screenshot', 'tangkap layar', 
-                   'capture layar', 'ambil gambar layar', 'indeks kode', 'codebase', 'foto',
-                   'ada apa di layar', 'jelaskan layar', 'analisa layar', 'analisa screenshot',
-                   'apa yang terlihat', 'lihat layar saya'],
-        tools: ['create_file', 'read_file', 'ingest_codebase', 'take_screenshot', 'analyze_screen']
-    },
-    MEMORY: {
-        keywords: ['ingat', 'memori', 'simpan', 'lupa', 'ingatan', 'remember', 'forget', 'memory', 'save', 'past'],
-        tools: ['save_memory', 'search_memory']
-    },
-    APP: {
-        keywords: ['kalkulator', 'calculator', 'notepad', 'catatan', 'wordpad', 'paint',
-                   'file explorer', 'task manager', 'pengelola tugas', 'control panel',
-                   'panel kontrol', 'command prompt', 'powershell', 'vscode', 'visual studio code',
-                   'discord', 'spotify', 'steam', 'telegram', 'snipping tool',
-                   'buka aplikasi', 'jalankan aplikasi', 'aplikasi',
-                   'volume', 'suara', 'kencangkan', 'pelankan', 'naikkan volume',
-                   'turunkan volume', 'mute', 'unmute'],
-        tools: ['open_app', 'control_volume']
-    },
-    EMAIL: {
-        keywords: ['email', 'e-mail', 'gmail', 'inbox', 'surel',
-                   'cek email', 'ada email', 'email baru', 'email masuk',
-                   'outlook', 'yahoo mail'],
-        tools: ['check_email']
-    },
-    CREDENTIALS: {
-        keywords: ['kredensial', 'credential', 'password', 'kata sandi', 'sandi',
-                   'login', 'akun', 'simpan password', 'simpan kredensial',
-                   'simpan akun', 'lupa password', 'hapus kredensial',
-                   'daftar kredensial', 'daftar akun tersimpan'],
-        tools: ['save_credential', 'list_credentials', 'delete_credential']
-    }
-};
 
 const SENSITIVE_CONTENT_PATTERN = /password|kredensial|credential|kata sandi|\bsandi\b|api[_\s]?key|token|secret|rahasia|\bpin\b|save_credential/i;
 
@@ -92,34 +43,118 @@ function isSensitiveContent(text) {
     return SENSITIVE_CONTENT_PATTERN.test(text);
 }
 
-function determineRelevantTools(userInput) {
-    if (!userInput || typeof userInput !== 'string') return [];
-
-    const lowerInput = userInput.toLowerCase();
-    const categoryScores = {};
-
-    for (const [categoryName, category] of Object.entries(TOOL_CATEGORIES)) {
-        const matchCount = category.keywords.filter(kw => lowerInput.includes(kw)).length;
-        if (matchCount > 0) categoryScores[categoryName] = matchCount;
+class SemanticRouter {
+    constructor() {
+        this.embeddings = new OllamaEmbeddings({
+            model: "nomic-embed-text",
+            baseUrl: "http://127.0.0.1:11434"
+        });
+        this.toolEmbeddings = new Map();
+        this.isInitialized = false;
     }
 
-    if (Object.keys(categoryScores).length === 0) {
-        logger.debug('ToolRouter', 'No categories matched — pure chat mode');
-        return { tools: [], categoryScores: {} };
+    async init() {
+        if (this.isInitialized) return;
+        const defs = registry.getToolDefinitions();
+        // Gabungkan nama dan deskripsi agar vektornya kaya konteks
+        const docs = defs.map(d => `${d.function.name}: ${d.function.description}`);
+        const names = defs.map(d => d.function.name);
+        
+        try {
+            logger.info('SemanticRouter', `Menginisialisasi embedding untuk ${names.length} tool...`);
+            const vectors = await this.embeddings.embedDocuments(docs);
+            for (let i = 0; i < names.length; i++) {
+                this.toolEmbeddings.set(names[i], vectors[i]);
+            }
+            this.isInitialized = true;
+            logger.info('SemanticRouter', 'Berhasil memuat embedding tool.');
+        } catch (e) {
+            logger.error('SemanticRouter', `Gagal inisialisasi embedding: ${e.message}`);
+        }
     }
 
-    const sortedCategories = Object.entries(categoryScores).sort((a, b) => b[1] - a[1]);
-    const selectedTools = new Set();
-    for (const [categoryName] of sortedCategories) {
-        TOOL_CATEGORIES[categoryName].tools.forEach(t => selectedTools.add(t));
+    cosineSimilarity(vecA, vecB) {
+        let dotProduct = 0;
+        let normA = 0;
+        let normB = 0;
+        for (let i = 0; i < vecA.length; i++) {
+            dotProduct += vecA[i] * vecB[i];
+            normA += vecA[i] * vecA[i];
+            normB += vecB[i] * vecB[i];
+        }
+        if (normA === 0 || normB === 0) return 0;
+        return dotProduct / (Math.sqrt(normA) * Math.sqrt(normB));
     }
 
-    const limitedTools = Array.from(selectedTools).slice(0, 5);
-    
-    logger.debug('ToolRouter', `Category scores: ${JSON.stringify(categoryScores)} -> Tools: [${limitedTools.join(', ')}]`);
-    
-    return { tools: limitedTools, categoryScores };
+    async determineRelevantTools(userInput) {
+        if (!userInput || typeof userInput !== 'string') return { tools: [], categoryScores: {} };
+        if (!this.isInitialized) await this.init();
+
+        try {
+            const queryVector = await this.embeddings.embedQuery(userInput);
+            const scores = [];
+
+            for (const [toolName, toolVector] of this.toolEmbeddings.entries()) {
+                const similarity = this.cosineSimilarity(queryVector, toolVector);
+                scores.push({ name: toolName, score: similarity });
+            }
+
+            // Urutkan berdasarkan similarity tertinggi
+            scores.sort((a, b) => b.score - a.score);
+
+            // Filter dengan threshold (0.45)
+            const THRESHOLD = 0.45; 
+            const relevant = scores.filter(s => s.score >= THRESHOLD);
+            
+            // Ambil maksimal 5 tool dari hasil semantic
+            let selectedTools = relevant.slice(0, 5).map(s => s.name);
+
+            // ================= HYBRID KEYWORD OVERRIDE =================
+            // Jika ada tool yang memiliki 'keywords' yang cocok dengan input user,
+            // paksa masukkan ke dalam selectedTools (di posisi paling atas).
+            const queryLower = userInput.toLowerCase();
+            const defs = registry.getToolDefinitions();
+            const keywordMatchedTools = [];
+            
+            defs.forEach(def => {
+                const toolName = def.function ? def.function.name : def.name;
+                const toolDef = def.function || def;
+                
+                if (toolDef.keywords && Array.isArray(toolDef.keywords)) {
+                    // Jika ada keyword yang termuat utuh di input user
+                    if (toolDef.keywords.some(kw => queryLower.includes(kw.toLowerCase()))) {
+                        keywordMatchedTools.push(toolName);
+                        // Tambahkan dummy score tinggi untuk UI
+                        scores.unshift({ name: toolName, score: 0.999 }); 
+                    }
+                }
+            });
+
+            // Gabungkan keyword match + semantic match (max 5)
+            const finalToolSet = new Set([...keywordMatchedTools, ...selectedTools]);
+            selectedTools = Array.from(finalToolSet).slice(0, 5);
+            // ===========================================================
+
+            // Format kategori untuk kompatibilitas trace
+            const categoryScores = {};
+            relevant.slice(0, 5).forEach(s => categoryScores[s.name] = parseFloat(s.score.toFixed(3)));
+
+            if (selectedTools.length === 0) {
+                logger.debug('ToolRouter', 'No tools matched similarity threshold — pure chat mode');
+                return { tools: [], categoryScores: {} };
+            }
+
+            logger.debug('ToolRouter', `Top tools: ${JSON.stringify(categoryScores)}`);
+            return { tools: selectedTools, categoryScores };
+
+        } catch (e) {
+            logger.error('ToolRouter', `Gagal embedding query: ${e.message}`);
+            return { tools: [], categoryScores: {} };
+        }
+    }
 }
+
+const semanticRouter = new SemanticRouter();
 
 function getFilteredToolDefinitions(toolNames) {
     if (!toolNames || toolNames.length === 0) return [];
@@ -162,15 +197,31 @@ function emitTrace(onTraceCallback, step) {
 
 class JarvisAgent {
     constructor() {
-        this.modelName = configManager.get('activeModel') || "qwen2.5:7b";
-        let defaultCtx = configManager.get('num_ctx');
-        if (defaultCtx === undefined) defaultCtx = 32000;
+        // Jika tidak ada di config, default ke model AWQ yang baru
+        this.modelName = configManager.get('activeModel') || "Chunity/gemma-4-E4B-it-AWQ-4bit";
         
-        this.model = new ChatOllama({
-            model: this.modelName,
-            temperature: 0.1,
-            num_ctx: defaultCtx,
-        });
+        let defaultCtx = configManager.get('num_ctx');
+        // Gunakan 4K konteks seperti permintaan user jika belum diset
+        if (defaultCtx === undefined) defaultCtx = 4096; 
+        
+        const isVLLM = this.modelName.includes('AWQ') || configManager.get('useVLLM');
+
+        if (isVLLM) {
+            this.model = new ChatOpenAI({
+                modelName: this.modelName,
+                temperature: 0.1,
+                maxTokens: defaultCtx,
+                configuration: {
+                    baseURL: "http://127.0.0.1:8000/v1"
+                }
+            });
+        } else {
+            this.model = new ChatOllama({
+                model: this.modelName,
+                temperature: 0.1,
+                num_ctx: defaultCtx,
+            });
+        }
 
         this.visionModel = new ChatOllama({
             model: "llava:7b",
@@ -235,11 +286,24 @@ class JarvisAgent {
         configManager.set('num_ctx', ctxSize);
         
         this.modelName = newModelName;
-        this.model = new ChatOllama({
-            model: this.modelName,
-            temperature: 0.1,
-            num_ctx: ctxSize,
-        });
+        const isVLLM = this.modelName.includes('AWQ') || configManager.get('useVLLM');
+
+        if (isVLLM) {
+            this.model = new ChatOpenAI({
+                modelName: this.modelName,
+                temperature: 0.1,
+                maxTokens: ctxSize,
+                configuration: {
+                    baseURL: "http://127.0.0.1:8000/v1"
+                }
+            });
+        } else {
+            this.model = new ChatOllama({
+                model: this.modelName,
+                temperature: 0.1,
+                num_ctx: ctxSize,
+            });
+        }
         
         logger.info('JarvisAgent', `Main model successfully reloaded to ${this.modelName}`);
     }
@@ -378,7 +442,7 @@ Pesan: "${userInput}"`;
             }
 
             // B. Dynamic Tool Routing
-            const routingResult = determineRelevantTools(cleanedInput);
+            const routingResult = await semanticRouter.determineRelevantTools(cleanedInput);
             const relevantToolNames = routingResult.tools;
             const filteredToolDefs = getFilteredToolDefinitions(relevantToolNames);
 
@@ -769,4 +833,3 @@ Tugas Anda:
 
 const agentInstance = new JarvisAgent();
 module.exports = agentInstance;
-module.exports._determineRelevantTools = determineRelevantTools;

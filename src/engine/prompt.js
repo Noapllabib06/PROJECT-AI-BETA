@@ -67,7 +67,8 @@ const TOOL_DECISION_RULES = `📋 **ATURAN PENGGUNAAN TOOL (WAJIB):**
     menyimpan teks tanpa enkripsi.
 31. save_memory HANYA untuk fakta umum non-sensitif (preferensi, nama, hobi,
     info kontekstual). Jika ragu apakah data bersifat rahasia/kredensial,
-    pilih save_credential.`;
+    pilih save_credential.
+32. **JANGAN MEMINTA IZIN/MENUNGGU KONFIRMASI** untuk menggunakan tool. Jika Anda butuh meriset (search_web), langsung panggil tool tersebut di output JSON tanpa perlu berkata "Bisakah Anda menunggu?" atau "Saya riset dulu ya". Langsung eksekusi!`;
 
 /**
  * GENERAL_ANSWER_RULES: Instruksi khusus untuk format jawaban.

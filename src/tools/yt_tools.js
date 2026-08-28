@@ -85,9 +85,11 @@ async function play_youtube_music(query) {
     logger.tool('play_youtube_music', `Playing: "${query}"`);
     try {
         const parsed = parseMusicQuery(query);
+        let finalVideoId;
         let url;
         const videoId = extractVideoId(query);
         if (videoId) {
+            finalVideoId = videoId;
             url = `https://music.youtube.com/watch?v=${videoId}`;
         } else {
             const searchResult = await searchYouTube(parsed.fullQuery, 1);
@@ -95,11 +97,12 @@ async function play_youtube_music(query) {
                 return `❌ Tidak dapat menemukan lagu "${query}" di YouTube.`;
             }
             const bestMatch = searchResult[0];
+            finalVideoId = bestMatch.id;
             url = `https://music.youtube.com/watch?v=${bestMatch.id}`;
         }
-        const command = process.platform === 'win32' ? `start "" "${url}"` : `open "${url}"`;
-        exec(command, (error) => { if (error) logger.error('play_music', `exec error: ${error.message}`); });
-        return `🎵 **Memutar Musik**\n🎶 Lagu: ${parsed.songTitle}\n🎤 Artis: ${parsed.artist || '—'}\n🔗 ${url}`;
+        
+        const jsonPayload = JSON.stringify({ videoId: finalVideoId, type: 'music', title: parsed.songTitle, artist: parsed.artist });
+        return `🎵 **Memutar Musik di Jarvis**\n🎶 Lagu: ${parsed.songTitle}\n🎤 Artis: ${parsed.artist || '—'}\n\n\`\`\`snippet.youtube\n${jsonPayload}\n\`\`\``;
     } catch (error) {
         logger.error('play_youtube_music', error);
         return `❌ Gagal memutar musik: ${error.message}`;
@@ -109,9 +112,11 @@ async function play_youtube_music(query) {
 async function play_youtube_video(query) {
     logger.tool('play_youtube_video', `Playing video: "${query}"`);
     try {
+        let finalVideoId;
         let url;
         const videoId = extractVideoId(query);
         if (videoId) {
+            finalVideoId = videoId;
             url = `https://www.youtube.com/watch?v=${videoId}`;
         } else {
             const searchResult = await searchYouTube(query, 1);
@@ -119,11 +124,12 @@ async function play_youtube_video(query) {
                 return `❌ Tidak dapat menemukan video "${query}" di YouTube.`;
             }
             const bestMatch = searchResult[0];
+            finalVideoId = bestMatch.id;
             url = `https://www.youtube.com/watch?v=${bestMatch.id}`;
         }
-        const command = process.platform === 'win32' ? `start "" "${url}"` : `open "${url}"`;
-        exec(command, (error) => { if (error) logger.error('play_video', `exec error: ${error.message}`); });
-        return `🎬 **Memutar Video**\n🔗 ${url}\n✅ Video akan dibuka di browser.`;
+        
+        const jsonPayload = JSON.stringify({ videoId: finalVideoId, type: 'video' });
+        return `🎬 **Memutar Video di Jarvis**\n🔗 ${url}\n\n\`\`\`snippet.youtube\n${jsonPayload}\n\`\`\``;
     } catch (error) {
         logger.error('play_youtube_video', error);
         return `❌ Gagal memutar video: ${error.message}`;

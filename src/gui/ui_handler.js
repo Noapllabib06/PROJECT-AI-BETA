@@ -218,6 +218,99 @@ function traceStepLabel(step) {
 
 // ===================== CODE PREVIEW PANE (File Draft / View) =====================
 
+const codeTabBar = document.getElementById('codeTabBar');
+const codePlaceholder = document.getElementById('codePlaceholder');
+
+const openTabs = new Map();
+let activeTabId = null;
+
+function switchTab(id) {
+    if (!openTabs.has(id)) return;
+    
+    activeTabId = id;
+    const tabData = openTabs.get(id);
+    
+    // Update UI for all tabs
+    for (const [tabId, data] of openTabs.entries()) {
+        if (tabId === id) {
+            data.contentEl.classList.remove('hidden');
+            data.tabBtnEl.classList.add('bg-surface', 'border-t-2', 'border-t-primary', 'text-primary');
+            data.tabBtnEl.classList.remove('bg-surface-container', 'text-secondary', 'hover:bg-surface-container-high');
+        } else {
+            data.contentEl.classList.add('hidden');
+            data.tabBtnEl.classList.remove('bg-surface', 'border-t-2', 'border-t-primary', 'text-primary');
+            data.tabBtnEl.classList.add('bg-surface-container', 'text-secondary', 'hover:bg-surface-container-high');
+        }
+    }
+    
+    codeFileName.textContent = tabData.title;
+    if (codePlaceholder) codePlaceholder.classList.add('hidden');
+}
+
+function closeTab(id, event) {
+    if (event) {
+        event.stopPropagation(); // prevent switching to this tab
+    }
+    
+    const tabData = openTabs.get(id);
+    if (!tabData) return;
+    
+    // Remove from DOM
+    tabData.contentEl.remove();
+    tabData.tabBtnEl.remove();
+    
+    openTabs.delete(id);
+    
+    if (openTabs.size === 0) {
+        clearCodePreview();
+    } else if (activeTabId === id) {
+        // Switch to the last opened tab
+        const lastTabId = Array.from(openTabs.keys()).pop();
+        switchTab(lastTabId);
+    }
+}
+
+function createOrUpdateTab(id, title, contentEl, type) {
+    expandCodeSidebar();
+    codeTabBar.classList.remove('hidden');
+    
+    if (openTabs.has(id)) {
+        // Tab exists, just replace content and switch to it
+        const tabData = openTabs.get(id);
+        tabData.contentEl.replaceWith(contentEl);
+        tabData.contentEl = contentEl;
+        tabData.title = title;
+        tabData.tabBtnEl.querySelector('.tab-title').textContent = title;
+        switchTab(id);
+        return;
+    }
+    
+    // Create new tab button
+    const tabBtn = document.createElement('button');
+    tabBtn.className = 'flex items-center gap-2 px-3 py-1.5 min-w-[120px] max-w-[200px] rounded-t-lg border border-b-0 border-border-subtle text-sm font-medium transition-colors shrink-0 outline-none';
+    
+    let iconName = 'description';
+    if (type === 'youtube-music') iconName = 'music_note';
+    else if (type === 'youtube-video') iconName = 'smart_display';
+    else if (type === 'image') iconName = 'image';
+    else if (type === 'web') iconName = 'public';
+    
+    tabBtn.innerHTML = `
+        <span class="material-symbols-outlined text-[16px] shrink-0">${iconName}</span>
+        <span class="tab-title truncate flex-1 text-left">${escapeHtml(title)}</span>
+        <span class="close-tab-btn material-symbols-outlined text-[14px] shrink-0 hover:text-error rounded hover:bg-black/10 p-0.5">close</span>
+    `;
+    
+    tabBtn.addEventListener('click', () => switchTab(id));
+    tabBtn.querySelector('.close-tab-btn').addEventListener('click', (e) => closeTab(id, e));
+    
+    codeTabBar.appendChild(tabBtn);
+    codeContentInner.appendChild(contentEl);
+    
+    openTabs.set(id, { id, title, type, contentEl, tabBtnEl: tabBtn });
+    switchTab(id);
+}
+
 function expandCodeSidebar() {
     codePreview.classList.remove('hidden');
     codePreview.classList.add('flex');
@@ -228,15 +321,11 @@ function expandCodeSidebar() {
  * ada tombol Konfirmasi (tulis ke disk via confirmSaveFile) dan Batalkan.
  */
 function renderFileDraft(filename, content) {
-    expandCodeSidebar();
-    codeFileName.textContent = filename;
-    codeContentInner.innerHTML = '';
-
-    if (filename === 'snippet.image' || filename.endsWith('.png') || filename.endsWith('.jpg')) {
+    if (filename.includes('snippet.image') || filename.endsWith('.png') || filename.endsWith('.jpg')) {
         try {
             const data = JSON.parse(content);
             const container = document.createElement('div');
-            container.className = 'flex flex-col h-full gap-4 overflow-y-auto p-4';
+            container.className = 'absolute inset-4 flex flex-col gap-4 overflow-y-auto hidden';
             
             if (data.path || data.image) {
                 const img = document.createElement('img');
@@ -252,20 +341,73 @@ function renderFileDraft(filename, content) {
                 container.appendChild(text);
             }
             
-            codeContentInner.appendChild(container);
+            const tabId = `image-${Date.now()}`;
+            createOrUpdateTab(tabId, filename, container, 'image');
             return;
         } catch (e) {
-            // Fallback if not valid JSON
             console.error("Gagal parse image snippet JSON", e);
+        }
+    }
+
+    if (filename.includes('snippet.youtube')) {
+        try {
+            const data = JSON.parse(content);
+            const container = document.createElement('div');
+            container.className = 'absolute inset-0 flex flex-col hidden';
+            
+            const tabTitle = data.type === 'music' ? 'YouTube Music' : 'YouTube Video';
+            const tabType = data.type === 'music' ? 'youtube-music' : 'youtube-video';
+            const tabId = `youtube-${data.videoId}`;
+            
+            const webview = document.createElement('webview');
+            
+            if (data.type === 'music') {
+                webview.src = `https://music.youtube.com/watch?v=${data.videoId}`;
+            } else {
+                webview.src = `https://www.youtube.com/watch?v=${data.videoId}`;
+            }
+            
+            webview.className = 'w-full h-full border-0 bg-black';
+            
+            container.appendChild(webview);
+            createOrUpdateTab(tabId, tabTitle, container, tabType);
+            return;
+        } catch (e) {
+            console.error("Gagal parse youtube snippet JSON", e);
+        }
+    }
+
+    if (filename.includes('snippet.web')) {
+        try {
+            const data = JSON.parse(content);
+            const container = document.createElement('div');
+            container.className = 'absolute inset-0 flex flex-col hidden';
+            
+            let tabTitle = data.title || 'Web Page';
+            // Capitalize title appropriately
+            tabTitle = tabTitle.charAt(0).toUpperCase() + tabTitle.slice(1);
+            
+            const tabId = `web-${Date.now()}`;
+            
+            const webview = document.createElement('webview');
+            // Persist session to allow keeping logins for WhatsApp, etc.
+            webview.partition = 'persist:jarvis';
+            webview.src = data.url;
+            webview.className = 'w-full h-full border-0 bg-white';
+            
+            container.appendChild(webview);
+            createOrUpdateTab(tabId, tabTitle, container, 'web');
+            return;
+        } catch (e) {
+            console.error("Gagal parse web snippet JSON", e);
         }
     }
     
     const container = document.createElement('div');
-    container.className = 'flex flex-col h-full gap-3';
-    codeContentInner.appendChild(container);
+    container.className = 'absolute inset-4 flex flex-col gap-3 hidden';
 
     const textarea = document.createElement('textarea');
-    textarea.className = 'code-editor flex-1';
+    textarea.className = 'code-editor flex-1 w-full p-3 font-code-snippet text-sm bg-surface-gray border border-border-subtle rounded-lg focus:outline-none focus:ring-1 focus:ring-primary/50 text-on-surface resize-none';
     textarea.value = content;
     container.appendChild(textarea);
 
@@ -294,6 +436,8 @@ function renderFileDraft(filename, content) {
 
     container.appendChild(actionsRow);
 
+    const tabId = `file-${filename}`;
+
     saveBtn.addEventListener('click', async () => {
         saveBtn.disabled = true;
         saveBtn.textContent = 'Menyimpan...';
@@ -319,8 +463,10 @@ function renderFileDraft(filename, content) {
     });
 
     discardBtn.addEventListener('click', () => {
-        clearCodePreview();
+        closeTab(tabId);
     });
+    
+    createOrUpdateTab(tabId, filename, container, 'code');
 }
 
 /**
@@ -333,9 +479,11 @@ function renderFileView(filename, content) {
 
 function clearCodePreview() {
     codeFileName.textContent = 'Preview';
-    codeContentInner.innerHTML = '<div class="bg-surface-gray rounded-lg border border-border-subtle h-full p-4 flex items-center justify-center text-secondary font-body-md">No active preview available.</div>';
+    if (codePlaceholder) codePlaceholder.classList.remove('hidden');
+    codeTabBar.classList.add('hidden');
     codePreview.classList.add('hidden');
     codePreview.classList.remove('flex');
+    activeTabId = null;
 }
 
 // ===================== MARKDOWN RENDERING (RINGAN) =====================

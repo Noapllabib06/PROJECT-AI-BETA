@@ -75,13 +75,27 @@ async function readFileTool(query) {
         if (!stats.isFile()) {
             return { success: false, error: `❌ Path bukan file: ${filePath}` };
         }
-        const textExtensions = ['.txt', '.js', '.json', '.md', '.html', '.css', '.xml', '.yaml', '.yml', '.log', '.env', '.py', '.java', '.php', '.rb', '.go', '.rs', '.sh', '.bat', '.sql', '.ts', '.jsx', '.tsx'];
+        const textExtensions = ['.txt', '.js', '.json', '.md', '.html', '.css', '.xml', '.yaml', '.yml', '.log', '.env', '.py', '.java', '.php', '.rb', '.go', '.rs', '.sh', '.bat', '.sql', '.ts', '.jsx', '.tsx', '.pdf'];
         const ext = path.extname(filePath).toLowerCase();
         if (!textExtensions.includes(ext)) {
             return { success: false, error: `❌ Ekstensi file tidak didukung untuk dibaca: ${ext}` };
         }
-        const MAX_SIZE = 3000;
-        let content = fs.readFileSync(filePath, 'utf-8');
+        const MAX_SIZE = 10000;
+        let content = "";
+
+        if (ext === '.pdf') {
+            try {
+                const pdfParse = require('pdf-parse');
+                let dataBuffer = fs.readFileSync(filePath);
+                let data = await pdfParse(dataBuffer);
+                content = data.text;
+            } catch (err) {
+                return { success: false, error: `❌ Gagal mem-parsing PDF. Pastikan library terinstal (npm install pdf-parse). Error: ${err.message}` };
+            }
+        } else {
+            content = fs.readFileSync(filePath, 'utf-8');
+        }
+
         if (content.length > MAX_SIZE) {
             content = content.substring(0, MAX_SIZE) + "\n\n... [TEKS DIPOTONG: File terlalu panjang]";
         }
