@@ -291,37 +291,100 @@ async function scrape_web_tool(url) {
     }
 }
 
+function decodeBingUrl(bingUrl) {
+    if (!bingUrl) return '';
+    if (bingUrl.includes('&u=a1')) {
+        try {
+            const uParam = bingUrl.split('&u=a1')[1].split('&')[0];
+            return Buffer.from(uParam, 'base64').toString('utf8');
+        } catch (e) {
+            return bingUrl;
+        }
+    }
+    return bingUrl;
+}
+
+async function searchBing(query) {
+    const url = `https://www.bing.com/search?q=${encodeURIComponent(query)}`;
+    const { data } = await axios.get(url, {
+        headers: {
+            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36',
+            'Accept-Language': 'id-ID,id;q=0.9,en-US;q=0.8,en;q=0.7'
+        },
+        timeout: 10000
+    });
+    const $ = cheerio.load(data);
+    let results = [];
+    $('#b_results .b_algo').each((i, el) => {
+        if (results.length >= 5) return false;
+        const title = $(el).find('h2 a').text().replace(/\s+/g, ' ').trim();
+        const rawLink = $(el).find('h2 a').attr('href');
+        const link = decodeBingUrl(rawLink);
+        const snippet = $(el).find('.b_caption p, .b_algoSlug, .b_lineclamp1, .b_lineclamp2').text().replace(/\s+/g, ' ').trim();
+        if (title && link) {
+            results.push(`${results.length + 1}. ${title}\n   Link: ${link}\n   Deskripsi: ${snippet || '(Tidak ada deskripsi)'}\n`);
+        }
+    });
+    return results;
+}
+
+async function searchYahoo(query) {
+    const url = `https://id.search.yahoo.com/search?p=${encodeURIComponent(query)}`;
+    const { data } = await axios.get(url, {
+        headers: {
+            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+            'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8',
+            'Accept-Language': 'id-ID,id;q=0.9,en-US;q=0.8,en;q=0.7'
+        },
+        timeout: 10000
+    });
+    const $ = cheerio.load(data);
+    let results = [];
+    $('.algo').each((i, el) => {
+        if (results.length >= 4) return false;
+        const title = $(el).find('h3.title a').text().replace(/\s+/g, ' ').trim();
+        let link = $(el).find('h3.title a').attr('href');
+        if (link && link.includes('RU=')) {
+            try {
+                let realUrl = link.split('RU=')[1].split('/')[0];
+                link = decodeURIComponent(realUrl);
+            } catch (e) { /* fallback */ }
+        }
+        const snippet = $(el).find('.compText, .fz-ms').text().replace(/\s+/g, ' ').trim();
+        if (title && link) {
+            results.push(`${results.length + 1}. ${title}\n   Link: ${link}\n   Deskripsi: ${snippet || '(Tidak ada deskripsi)'}\n`);
+        }
+    });
+    return results;
+}
+
+async function performWebSearch(query) {
+    let results = [];
+    // 1. Coba Bing Search sebagai mesin utama
+    try {
+        results = await searchBing(query);
+    } catch (e) {
+        logger.warn('search_web', `Bing search gagal (${e.message}), mencoba fallback ke Yahoo...`);
+    }
+
+    // 2. Jika Bing gagal / tidak ada hasil, coba Yahoo Search
+    if (!results || results.length === 0) {
+        try {
+            results = await searchYahoo(query);
+        } catch (e) {
+            logger.warn('search_web', `Yahoo search gagal (${e.message}).`);
+        }
+    }
+
+    return results;
+}
+
 async function search_web_tool(query) {
     const startTime = Date.now();
     logger.tool('search_web_tool', `Searching: "${query}"`);
     try {
-        const url = `https://id.search.yahoo.com/search?p=${encodeURIComponent(query)}`;
-        const { data } = await axios.get(url, {
-            headers: {
-                'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
-                'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8',
-                'Accept-Language': 'id-ID,id;q=0.9,en-US;q=0.8,en;q=0.7'
-            },
-            timeout: 10000
-        });
-        const $ = cheerio.load(data);
-        let results = [];
-        $('.algo').each((i, el) => {
-            if (i >= 4) return false;
-            const title = $(el).find('h3.title a').text().replace(/\s+/g, ' ').trim();
-            let link = $(el).find('h3.title a').attr('href');
-            if (link && link.includes('RU=')) {
-                try {
-                    let realUrl = link.split('RU=')[1].split('/')[0];
-                    link = decodeURIComponent(realUrl);
-                } catch (e) { /* fallback */ }
-            }
-            const snippet = $(el).find('.compText, .fz-ms').text().replace(/\s+/g, ' ').trim();
-            if (title && link) {
-                results.push(`${results.length + 1}. ${title}\n   Link: ${link}\n   Deskripsi: ${snippet || '(Tidak ada deskripsi)'}\n`);
-            }
-        });
-        if (results.length === 0) return "Maaf, tidak ada hasil yang ditemukan. Mesin pencari mungkin meminta verifikasi Captcha.";
+        const results = await performWebSearch(query);
+        if (results.length === 0) return "Maaf, tidak ada hasil yang ditemukan dari mesin pencari.";
         const duration = Date.now() - startTime;
         logger.tool('search_web_tool', `Success (${duration}ms, ${results.length} results)`);
         return `🔍 **Hasil Pencarian Web untuk: "${query}"**\n\n` + results.join('\n');
@@ -377,7 +440,7 @@ const webTools = [
     },
     {
         name: "search_web",
-        description: "Mencari informasi di internet menggunakan Yahoo Search. Mengembalikan hasil teratas dengan judul, deskripsi, dan URL.",
+        description: "Mencari informasi di internet (Bing/Yahoo). Mengembalikan hasil teratas dengan judul, deskripsi, dan URL.",
         parameters: {
             type: "object",
             properties: {
@@ -393,38 +456,10 @@ const webTools = [
             try {
                 if (!query) return { success: false, error: "Query pencarian tidak boleh kosong." };
 
-                // Yahoo Search (Bing engine) — lebih ramah terhadap bot dibanding Google/DDG
-                const url = `https://id.search.yahoo.com/search?p=${encodeURIComponent(query)}`;
-                const { data } = await axios.get(url, {
-                    headers: {
-                        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
-                        'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8',
-                        'Accept-Language': 'id-ID,id;q=0.9,en-US;q=0.8,en;q=0.7'
-                    },
-                    timeout: 10000
-                });
-
-                const $ = cheerio.load(data);
-                let results = [];
-
-                $('.algo').each((i, el) => {
-                    if (i >= 4) return false;
-                    const title = $(el).find('h3.title a').text().replace(/\s+/g, ' ').trim();
-                    let link = $(el).find('h3.title a').attr('href');
-                    if (link && link.includes('RU=')) {
-                        try {
-                            let realUrl = link.split('RU=')[1].split('/')[0];
-                            link = decodeURIComponent(realUrl);
-                        } catch (e) { /* fallback */ }
-                    }
-                    const snippet = $(el).find('.compText, .fz-ms').text().replace(/\s+/g, ' ').trim();
-                    if (title && link) {
-                        results.push(`${results.length + 1}. ${title}\n   Link: ${link}\n   Deskripsi: ${snippet || '(Tidak ada deskripsi)'}\n`);
-                    }
-                });
+                const results = await performWebSearch(query);
 
                 if (results.length === 0) {
-                    return { success: false, error: "Tidak ada hasil yang ditemukan. Mesin pencari mungkin meminta verifikasi Captcha." };
+                    return { success: false, error: "Tidak ada hasil yang ditemukan dari mesin pencari." };
                 }
 
                 return { 

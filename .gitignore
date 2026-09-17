@@ -47,6 +47,7 @@ __pycache__/
 *.pyc
 
 # Local Database & Personal Data
+*.pkl
 text_metadata.pkl
 *.index
 *.bin
@@ -58,3 +59,4 @@ memory_index.bin
 venv/
 vllm-env/
 vllm-env-311/
+vllm-env-official/

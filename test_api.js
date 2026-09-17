@@ -7,7 +7,7 @@ async function runTest() {
         const indexRes = await axios.post('http://localhost:8000/index', {
             texts: [
                 "Saya berencana membuat framework AI bernama Project-AI menggunakan Electron.",
-                "Rahasia password server saya adalah 'kopi_hitam_123'."
+                "Teknologi pendukung yang digunakan adalah Node.js dan Python FastAPI."
             ]
         });
         console.log(`✅ Memori berhasil ditambahkan! (${indexRes.data.added} dokumen)`);
@@ -21,7 +21,7 @@ async function runTest() {
         console.log("✅ Hasil Pencarian 1:", searchRes.data.results);
 
         const searchRes2 = await axios.post('http://localhost:8000/search', {
-            query: "Apa password server saya yang kemarin saya beritahu?",
+            query: "Teknologi apa saja yang digunakan untuk backend?",
             k: 3
         });
         console.log("✅ Hasil Pencarian 2:", searchRes2.data.results);
