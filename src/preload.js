@@ -97,6 +97,9 @@ contextBridge.exposeInMainWorld('jarvis', {
     saveSettings: (settings) => ipcRenderer.invoke('save-settings', settings),
     getOllamaModels: () => ipcRenderer.invoke('get-ollama-models'),
     
+    // ==================== CLIPBOARD ====================
+    copyToClipboard: (text) => ipcRenderer.invoke('copy-to-clipboard', text),
+
     // ==================== WINDOW CONTROLS ====================
     
     minimizeWindow: () => ipcRenderer.send('window-minimize'),

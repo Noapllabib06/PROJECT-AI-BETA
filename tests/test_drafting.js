@@ -1,4 +1,4 @@
-const draftingTools = require('./src/tools/drafting_tools');
+const draftingTools = require('../src/tools/drafting_tools');
 
 async function runTest() {
     const saveTool = draftingTools.find(t => t.name === 'save_draft_section');

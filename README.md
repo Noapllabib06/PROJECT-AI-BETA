@@ -29,7 +29,7 @@ cd Project-AI
 npm install
 python -m venv venv
 .\venv\Scripts\activate
-pip install fastapi uvicorn sentence-transformers faiss-cpu numpy turbovec pydantic
+pip install -r requirements.txt
 ```
 
 ## Panduan Penggunaan

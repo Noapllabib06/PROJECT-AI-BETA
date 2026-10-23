@@ -304,79 +304,143 @@ function decodeBingUrl(bingUrl) {
     return bingUrl;
 }
 
-async function searchBing(query) {
-    const url = `https://www.bing.com/search?q=${encodeURIComponent(query)}`;
-    const { data } = await axios.get(url, {
-        headers: {
-            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36',
-            'Accept-Language': 'id-ID,id;q=0.9,en-US;q=0.8,en;q=0.7'
-        },
-        timeout: 10000
-    });
-    const $ = cheerio.load(data);
-    let results = [];
-    $('#b_results .b_algo').each((i, el) => {
-        if (results.length >= 5) return false;
-        const title = $(el).find('h2 a').text().replace(/\s+/g, ' ').trim();
-        const rawLink = $(el).find('h2 a').attr('href');
-        const link = decodeBingUrl(rawLink);
-        const snippet = $(el).find('.b_caption p, .b_algoSlug, .b_lineclamp1, .b_lineclamp2').text().replace(/\s+/g, ' ').trim();
-        if (title && link) {
-            results.push(`${results.length + 1}. ${title}\n   Link: ${link}\n   Deskripsi: ${snippet || '(Tidak ada deskripsi)'}\n`);
-        }
-    });
-    return results;
+function cleanSearchQuery(rawQuery) {
+    if (!rawQuery || typeof rawQuery !== 'string') return '';
+    let cleaned = rawQuery.trim();
+    // Hilangkan kata-kata basa-basi percakapan yang sering merusak hasil mesin pencari
+    cleaned = cleaned.replace(/^(tolong|coba|bisa|mohon|carikan|cariin|cari)\s+(di\s+internet|di\s+web|info\s+tentang|informasi\s+tentang|tentang)?\s*/gi, '');
+    cleaned = cleaned.replace(/\b(di\s+internet|di\s+web|di\s+google|dong|ya|sih|kah)\b/gi, '');
+    cleaned = cleaned.replace(/\s+/g, ' ').trim();
+    return cleaned || rawQuery;
 }
 
-async function searchYahoo(query) {
-    const url = `https://id.search.yahoo.com/search?p=${encodeURIComponent(query)}`;
-    const { data } = await axios.get(url, {
-        headers: {
-            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
-            'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8',
-            'Accept-Language': 'id-ID,id;q=0.9,en-US;q=0.8,en;q=0.7'
-        },
-        timeout: 10000
-    });
-    const $ = cheerio.load(data);
-    let results = [];
-    $('.algo').each((i, el) => {
-        if (results.length >= 4) return false;
-        const title = $(el).find('h3.title a').text().replace(/\s+/g, ' ').trim();
-        let link = $(el).find('h3.title a').attr('href');
-        if (link && link.includes('RU=')) {
-            try {
-                let realUrl = link.split('RU=')[1].split('/')[0];
-                link = decodeURIComponent(realUrl);
-            } catch (e) { /* fallback */ }
-        }
-        const snippet = $(el).find('.compText, .fz-ms').text().replace(/\s+/g, ' ').trim();
-        if (title && link) {
-            results.push(`${results.length + 1}. ${title}\n   Link: ${link}\n   Deskripsi: ${snippet || '(Tidak ada deskripsi)'}\n`);
-        }
-    });
-    return results;
+/**
+ * Pencarian Faktual Ensiklopedia via Wikipedia Indonesia API resmi
+ */
+async function searchWikipedia(query, limit = 2) {
+    try {
+        const cleanQ = cleanSearchQuery(query);
+        const searchUrl = `https://id.wikipedia.org/w/api.php?action=query&list=search&srsearch=${encodeURIComponent(cleanQ)}&utf8=&format=json&srlimit=${limit}`;
+        const res = await axios.get(searchUrl, {
+            headers: { 'User-Agent': 'JarvisAI/1.0 (jarvis@project-ai.local)' },
+            timeout: 8000
+        });
+        const list = res.data?.query?.search || [];
+        if (list.length === 0) return [];
+
+        // Ambil kutipan pengantar (extract) untuk artikel teratas
+        const topTitle = list[0].title;
+        let fullExtract = '';
+        try {
+            const extractUrl = `https://id.wikipedia.org/w/api.php?action=query&prop=extracts&exintro=1&explaintext=1&titles=${encodeURIComponent(topTitle)}&format=json`;
+            const extractRes = await axios.get(extractUrl, {
+                headers: { 'User-Agent': 'JarvisAI/1.0 (jarvis@project-ai.local)' },
+                timeout: 5000
+            });
+            const pages = extractRes.data?.query?.pages || {};
+            const pageId = Object.keys(pages)[0];
+            if (pageId && pages[pageId]?.extract) {
+                fullExtract = pages[pageId].extract.substring(0, 800);
+            }
+        } catch (e) {}
+
+        return list.map((item, idx) => {
+            const link = `https://id.wikipedia.org/wiki/${encodeURIComponent(item.title.replace(/\s+/g, '_'))}`;
+            const snippet = (idx === 0 && fullExtract) ? fullExtract : item.snippet.replace(/<[^>]+>/g, '').trim();
+            return {
+                source: 'Wikipedia Indonesia',
+                title: item.title,
+                link: link,
+                snippet: snippet
+            };
+        });
+    } catch (e) {
+        logger.warn('searchWikipedia', `Wikipedia API error: ${e.message}`);
+        return [];
+    }
+}
+
+/**
+ * Pencarian Berita & Artikel Terkini via Google News RSS
+ */
+async function searchGoogleNews(query, limit = 4) {
+    try {
+        const cleanQ = cleanSearchQuery(query);
+        const url = `https://news.google.com/rss/search?q=${encodeURIComponent(cleanQ)}&hl=id&gl=ID&ceid=ID:id`;
+        const res = await axios.get(url, { 
+            headers: { 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36' },
+            timeout: 8000 
+        });
+        const $ = cheerio.load(res.data, { xmlMode: true });
+        const items = [];
+        $('item').slice(0, limit).each((i, el) => {
+            const title = $(el).find('title').text().trim();
+            const link = $(el).find('link').text().trim();
+            const pubDate = $(el).find('pubDate').text().trim();
+            const source = $(el).find('source').text().trim() || 'Google News';
+            if (title && link) {
+                items.push({
+                    source: `Google News (${source})`,
+                    title: title,
+                    link: link,
+                    snippet: `Dipublikasikan: ${pubDate}`
+                });
+            }
+        });
+        return items;
+    } catch (e) {
+        logger.warn('searchGoogleNews', `Google News error: ${e.message}`);
+        return [];
+    }
+}
+
+/**
+ * Pencarian Web Lengkap via Google Custom Search JSON API (jika API key tersedia di .env)
+ */
+async function searchGoogleCustom(query, limit = 5) {
+    const apiKey = process.env.GOOGLE_SEARCH_API_KEY;
+    const cx = process.env.GOOGLE_SEARCH_CX;
+    if (!apiKey || !cx) return [];
+
+    try {
+        const cleanQ = cleanSearchQuery(query);
+        const url = `https://www.googleapis.com/customsearch/v1?key=${apiKey}&cx=${cx}&q=${encodeURIComponent(cleanQ)}&num=${limit}&hl=id&gl=id`;
+        const res = await axios.get(url, { timeout: 8000 });
+        const items = res.data?.items || [];
+        return items.map(item => ({
+            source: 'Google Search',
+            title: item.title,
+            link: item.link,
+            snippet: item.snippet
+        }));
+    } catch (e) {
+        logger.warn('searchGoogleCustom', `Google Custom Search API error: ${e.message}`);
+        return [];
+    }
 }
 
 async function performWebSearch(query) {
-    let results = [];
-    // 1. Coba Bing Search sebagai mesin utama
-    try {
-        results = await searchBing(query);
-    } catch (e) {
-        logger.warn('search_web', `Bing search gagal (${e.message}), mencoba fallback ke Yahoo...`);
+    const cleanQ = cleanSearchQuery(query);
+    logger.info('performWebSearch', `Query original: "${query}" -> Cleaned: "${cleanQ}"`);
+
+    // 1. Cek Google Custom Search (jika API key terpasang di .env)
+    const googleCustomResults = await searchGoogleCustom(cleanQ, 5);
+    
+    // 2. Eksekusi Wikipedia dan Google News secara paralel
+    const [wikiResults, newsResults] = await Promise.all([
+        searchWikipedia(cleanQ, 2),
+        searchGoogleNews(cleanQ, 4)
+    ]);
+
+    const combined = [...googleCustomResults, ...wikiResults, ...newsResults];
+
+    if (combined.length === 0) {
+        return [];
     }
 
-    // 2. Jika Bing gagal / tidak ada hasil, coba Yahoo Search
-    if (!results || results.length === 0) {
-        try {
-            results = await searchYahoo(query);
-        } catch (e) {
-            logger.warn('search_web', `Yahoo search gagal (${e.message}).`);
-        }
-    }
-
-    return results;
+    return combined.map((item, index) => {
+        return `${index + 1}. [${item.title}](${item.link}) — *${item.source}*\n   Deskripsi: ${item.snippet}\n`;
+    });
 }
 
 async function search_web_tool(query) {
@@ -387,7 +451,7 @@ async function search_web_tool(query) {
         if (results.length === 0) return "Maaf, tidak ada hasil yang ditemukan dari mesin pencari.";
         const duration = Date.now() - startTime;
         logger.tool('search_web_tool', `Success (${duration}ms, ${results.length} results)`);
-        return `🔍 **Hasil Pencarian Web untuk: "${query}"**\n\n` + results.join('\n');
+        return `🔍 **Hasil Pencarian Web (Google & Wikipedia) untuk: "${query}"**\n\n` + results.join('\n');
     } catch (error) {
         logger.error('search_web_tool', error);
         const fallbackUrl = `https://www.google.com/search?q=${encodeURIComponent(query)}`;
@@ -440,13 +504,14 @@ const webTools = [
     },
     {
         name: "search_web",
-        description: "Mencari informasi di internet (Bing/Yahoo). Mengembalikan hasil teratas dengan judul, deskripsi, dan URL.",
+        description: "Mencari informasi terkini, artikel, berita, dan fakta di internet via Google dan Wikipedia. Mengembalikan judul, tautan (URL), sumber, dan deskripsi cuplikan.",
+        keywords: ['cari di web', 'cari di internet', 'search web', 'google', 'berita terbaru', 'info terbaru', 'siapa presiden', 'harga', 'cari berita'],
         parameters: {
             type: "object",
             properties: {
                 query: {
                     type: "string",
-                    description: "Kata kunci pencarian. Contoh: 'berita teknologi terbaru', 'cara instal python'."
+                    description: "Kata kunci inti pencarian (tanpa kata sambung berlebih). Contoh: 'Presiden Indonesia saat ini', 'contoh esai anti korupsi', 'harga laptop ASUS ROG'."
                 }
             },
             required: ["query"]
@@ -464,12 +529,45 @@ const webTools = [
 
                 return { 
                     success: true, 
-                    data: `🔍 **Hasil Pencarian Web untuk: "${query}"**\n\n${results.join('\n')}` 
+                    data: `🔍 **Hasil Pencarian Web (Google & Wikipedia) untuk: "${query}"**\n\n${results.join('\n')}` 
                 };
             } catch (error) {
                 console.error("[search_web_tool_registry] Raw Error:", error);
                 logger.error('search_web_tool_registry', error);
                 return { success: false, error: error.message || "Failed to execute search" };
+            }
+        }
+    },
+    {
+        name: "search_wikipedia",
+        description: "Mencari ensiklopedia Wikipedia Indonesia untuk definisi konsep, sejarah, biografi tokoh, sains, hukum, dan pengetahuan umum faktual.",
+        keywords: ['wikipedia', 'wiki', 'apa itu', 'siapa itu', 'sejarah', 'definisi', 'biografi', 'pengertian'],
+        parameters: {
+            type: "object",
+            properties: {
+                query: {
+                    type: "string",
+                    description: "Topik atau nama entitas yang ingin dicari di Wikipedia. Contoh: 'Kecerdasan buatan', 'Soekarno', 'Hukum Newton', 'KPK'."
+                }
+            },
+            required: ["query"]
+        },
+        execute: async (args) => {
+            const query = args.query || '';
+            try {
+                if (!query) return { success: false, error: "Query pencarian tidak boleh kosong." };
+                const results = await searchWikipedia(query, 3);
+                if (results.length === 0) {
+                    return { success: false, error: `Tidak ditemukan artikel Wikipedia untuk topik "${query}".` };
+                }
+                const formatted = results.map((r, i) => `${i + 1}. [${r.title}](${r.link})\n   Kutipan: ${r.snippet}\n`).join('\n');
+                return {
+                    success: true,
+                    data: `📚 **Hasil Ensiklopedia Wikipedia untuk: "${query}"**\n\n${formatted}`
+                };
+            } catch (error) {
+                logger.error('search_wikipedia', error);
+                return { success: false, error: error.message || "Gagal mencari di Wikipedia" };
             }
         }
     },

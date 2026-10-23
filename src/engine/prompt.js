@@ -68,7 +68,15 @@ const TOOL_DECISION_RULES = `📋 **ATURAN PENGGUNAAN TOOL (WAJIB):**
 31. save_memory HANYA untuk fakta umum non-sensitif (preferensi, nama, hobi,
     info kontekstual). Jika ragu apakah data bersifat rahasia/kredensial,
     pilih save_credential.
-32. **JANGAN MEMINTA IZIN/MENUNGGU KONFIRMASI** untuk menggunakan tool. Jika Anda butuh meriset (search_web), langsung panggil tool tersebut di output JSON tanpa perlu berkata "Bisakah Anda menunggu?" atau "Saya riset dulu ya". Langsung eksekusi!`;
+32. **JANGAN MEMINTA IZIN/MENUNGGU KONFIRMASI** untuk menggunakan tool. Jika Anda butuh meriset (search_web), langsung panggil tool tersebut di output JSON tanpa perlu berkata "Bisakah Anda menunggu?" atau "Saya riset dulu ya". Langsung eksekusi!
+33. **ATURAN EKSTRAKSI KATA KUNCI PENCARIAN (SEARCH QUERY OPTIMIZATION):**
+    Saat memanggil tool \`search_web\` atau \`search_wikipedia\`:
+    - Ekstraksi HANYA KATA KUNCI INTI (subjek/topik).
+    - BUANG SEMUA kata percakapan basa-basi seperti "tolong", "bisa carikan", "coba cari", "tentang", "terkait", "di internet", "di web", "dong", "ya", "sih", "contohnya".
+    - JANGAN menerjemahkan istilah Indonesia ke bahasa Inggris kecuali istilah teknologi/teknis murni.
+    - JANGAN mengganti kata kunci dengan topik lain yang melenceng.
+    - Untuk definisi konsep, istilah ilmiah, sejarah, biografi tokoh, hukum, dan ensiklopedia umum — gunakan \`search_wikipedia\`.
+    - Untuk berita terkini, artikel, panduan, harga barang, atau info real-time — gunakan \`search_web\`.`;
 
 /**
  * GENERAL_ANSWER_RULES: Instruksi khusus untuk format jawaban.
@@ -157,9 +165,24 @@ Assistant: {"tool": "save_credential", "query": "facebook: 123456"}
 
 User: "buat catatan password email saya"  
 Assistant: {"tool": "save_credential", "query": "email: [PASSWORD]"}`,
-    search_web: `✅ (cari info real-time):
+    search_web: `✅ (cari info real-time / artikel / berita via Google & web):
+User: "tolong cari di internet terkait contoh essay anti korupsi"
+Assistant: {"tool": "search_web", "query": "contoh esai anti korupsi"}
+
+User: "siapa presiden indonesia saat ini ya jarvis?"
+Assistant: {"tool": "search_web", "query": "Presiden Indonesia saat ini"}
+
 User: "cari berita teknologi terbaru"
 Assistant: {"tool": "search_web", "query": "berita teknologi terbaru"}`,
+    search_wikipedia: `✅ (cari ensiklopedia / definisi konsep / sejarah / biografi tokoh):
+User: "apa itu anarkisme dan sejarahnya?"
+Assistant: {"tool": "search_wikipedia", "query": "Anarkisme"}
+
+User: "jelaskan biografi b.j. habibie"
+Assistant: {"tool": "search_wikipedia", "query": "B.J. Habibie"}
+
+User: "apa tugas dan wewenang komisi pemberantasan korupsi?"
+Assistant: {"tool": "search_wikipedia", "query": "Komisi Pemberantasan Korupsi"}`,
     search_youtube: `✅ (cari konten YouTube):
 User: "putar tutorial volumetrik Blender"
 Assistant: {"tool": "search_youtube", "query": "tutorial volumetrik Blender"}`,

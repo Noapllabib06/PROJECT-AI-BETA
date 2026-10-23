@@ -1,0 +1,18 @@
+# Core Backend & RAG Memory
+fastapi>=0.100.0
+uvicorn>=0.22.0
+pydantic>=2.0.0
+numpy>=1.24.0
+sentence-transformers>=2.2.0
+faiss-cpu>=1.7.4
+turbovec>=0.1.0
+rank-bm25>=0.2.2
+
+# Optional Audio / Voice Processing (audio_tools.js)
+openai-whisper>=20231117
+edge-tts>=6.1.9
+
+# Optional Neural OCR Processing (scripts/neural_ocr.py)
+# Note: On Windows, install paddlepaddle compatible with your CUDA or CPU version first
+# paddlepaddle>=2.5.0
+# paddleocr>=2.7.0

@@ -1,5 +1,5 @@
 const { OllamaEmbeddings } = require('@langchain/ollama');
-const registry = require('./src/tools/registry');
+const registry = require('../src/tools/registry');
 
 function cosineSimilarity(vecA, vecB) {
     let dotProduct = 0;

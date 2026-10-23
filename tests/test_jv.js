@@ -1,5 +1,5 @@
-const jv = require('./src/engine/json_validator.js');
-const reg = require('./src/tools/registry');
+const jv = require('../src/engine/json_validator.js');
+const reg = require('../src/tools/registry');
 
 reg.loadAll();
 

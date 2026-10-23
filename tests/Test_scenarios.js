@@ -19,8 +19,8 @@
  * 3. Jalankan: node test_scenarios.js
  */
 
-const agent = require('./src/engine/agent.js');
-const promptModule = require('./src/engine/prompt.js');
+const agent = require('../src/engine/agent.js');
+const promptModule = require('../src/engine/prompt.js');
 
 let passCount = 0;
 let failCount = 0;

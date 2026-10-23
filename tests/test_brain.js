@@ -3,7 +3,7 @@
  * Script untuk menguji Memori dan State Management Jarvis
  */
 
-const agent = require('./src/engine/agent');
+const agent = require('../src/engine/agent');
 
 async function runTest() {
     console.log("=== MEMULAI TEST FASE 3: KECERDASAN & MEMORI ===\n");

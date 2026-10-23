@@ -1,6 +1,7 @@
 // src/main.js
 // Electron Main Process - Window Management, IPC, Tool Orchestrator
-const { app, BrowserWindow, ipcMain, session, shell } = require('electron');
+require('dotenv').config();
+const { app, BrowserWindow, ipcMain, session, shell, Menu, MenuItem, clipboard } = require('electron');
 const path = require('path');
 const fs = require('fs');
 const os = require('os');
@@ -50,6 +51,22 @@ function createWindow() {
     mainWindow.webContents.setWindowOpenHandler(({ url }) => {
         shell.openExternal(url);
         return { action: 'deny' };
+    });
+
+    // Native context menu (Right-click: Salin, Tempel, Pilih Semua)
+    mainWindow.webContents.on('context-menu', (event, params) => {
+        const menu = new Menu();
+        if (params.selectionText && params.selectionText.trim().length > 0) {
+            menu.append(new MenuItem({ label: 'Salin (Copy)', role: 'copy' }));
+            menu.append(new MenuItem({ type: 'separator' }));
+        }
+        if (params.isEditable) {
+            menu.append(new MenuItem({ label: 'Tempel (Paste)', role: 'paste' }));
+            menu.append(new MenuItem({ label: 'Potong (Cut)', role: 'cut' }));
+            menu.append(new MenuItem({ type: 'separator' }));
+        }
+        menu.append(new MenuItem({ label: 'Pilih Semua (Select All)', role: 'selectAll' }));
+        menu.popup({ window: mainWindow });
     });
 }
 
@@ -222,6 +239,15 @@ ipcMain.handle('confirm-save-file', async (event, { filename, content }) => {
     } catch (error) {
         console.error("Confirm Save File Error:", error);
         return { success: false, error: error.message };
+    }
+});
+
+ipcMain.handle('copy-to-clipboard', async (event, text) => {
+    try {
+        clipboard.writeText(text || '');
+        return { success: true };
+    } catch (err) {
+        return { success: false, error: err.message };
     }
 });
 

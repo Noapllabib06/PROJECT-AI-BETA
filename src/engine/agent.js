@@ -166,16 +166,49 @@ function getFilteredToolDefinitions(toolNames) {
     });
 }
 
-const STALE_KNOWLEDGE_KEYWORDS = [
+const PUBLIC_FACT_KEYWORDS = [
     'presiden', 'wakil presiden', 'menteri', 'gubernur', 'walikota', 'bupati',
     'ceo', 'direktur utama', 'ketua umum', 'kapolri', 'panglima',
-    'harga', 'kurs', 'nilai tukar', 'saham',
-    'saat ini', 'sekarang', 'terbaru', 'terkini'
+    'harga', 'kurs', 'nilai tukar', 'saham', 'inflasi', 'bursa'
+];
+
+const TIME_SENSITIVE_KEYWORDS = [
+    'saat ini', 'sekarang', 'terbaru', 'terkini', 'hari ini'
+];
+
+const SELF_STATE_PATTERNS = [
+    /\b(kamu|anda|jarvis|lu|kau)\b.*\b(sedang|lagi|lakukan|ngapain|status|kabar|bisa apa)\b/i,
+    /\b(sedang|lagi)\s+(apa|ngapain|lakukan)\b/i,
+    /\bstatus\s+(kamu|anda|jarvis|sistem)\b/i
 ];
 
 function requiresForcedWebSearch(userInput) {
+    if (!userInput || typeof userInput !== 'string') return false;
     const lower = userInput.toLowerCase();
-    return STALE_KNOWLEDGE_KEYWORDS.some(kw => lower.includes(kw));
+
+    // 1. Jika menanyakan status/aktivitas Jarvis atau obrolan diri, JANGAN paksa web search
+    if (SELF_STATE_PATTERNS.some(pattern => pattern.test(lower))) {
+        return false;
+    }
+
+    // 2. Jika ada keyword fakta publik yang rentan basi, SELALU paksa web search
+    if (PUBLIC_FACT_KEYWORDS.some(kw => lower.includes(kw))) {
+        return true;
+    }
+
+    // 3. Jika hanya memuat kata waktu (sekarang/terkini/hari ini)
+    const hasTimeKeyword = TIME_SENSITIVE_KEYWORDS.some(kw => lower.includes(kw));
+    if (hasTimeKeyword) {
+        // Abaikan jika personal/obrolan
+        const isPersonalOrChat = /\b(nama saya|hobi saya|siapa saya|ingat|bicara|ngobrol|halo|hai)\b/i.test(lower);
+        if (isPersonalOrChat) return false;
+
+        // Pertanyaan fakta publik seperti berita, skor, cuaca, dll.
+        const isFactualInquiry = /\b(siapa|berita|apa itu|kejadian|skor|pertandingan|cuaca|gempa)\b/i.test(lower);
+        return isFactualInquiry;
+    }
+
+    return false;
 }
 
 /**
@@ -500,7 +533,7 @@ Pesan: "${userInput}"`;
                 toolsToExecute = parseResult.data;
             }
 
-            const SYNTHESIS_REQUIRED_TOOLS = ['search_web', 'read_webpage', 'research_and_summarize', 'save_memory', 'search_memory'];
+            const SYNTHESIS_REQUIRED_TOOLS = ['search_web', 'search_wikipedia', 'read_webpage', 'research_and_summarize', 'save_memory', 'search_memory'];
             let needsSynthesis = false;
             let rawSynthesisData = "";
             let finalOutput = "";
@@ -657,14 +690,15 @@ Pesan: "${userInput}"`;
                 if (onTokenCallback) onTokenCallback('\nMerangkum hasil...\n');
                 emitTrace(onTraceCallback, { type: 'synthesis_start' });
 
-                const synthesisPrompt = `Berikut hasil mentah dari tool untuk query "${cleanedInput}":
+                const synthesisPrompt = `Berikut data mentah dari pencarian web/informasi untuk query pengguna "${cleanedInput}":
 
 ${rawSynthesisData}
 
-Tugas Anda:
-1. Rangkum informasi dari hasil mentah di atas dengan DETAIL dan LENGKAP.
-2. Jawab langsung dalam bahasa natural, BUKAN format JSON.
-3. Jika hasil pencarian tidak relevan, katakan terus terang bahwa informasi yang ditemukan kurang relevan/kurang update.`;
+Tugas Anda sebagai JARVIS:
+1. Rangkum informasi secara KOMPREHENSIF, JELAS, dan FAKTUAL berdasarkan data di atas.
+2. PENTING: Selalu cantumkan tautan / link sumber dalam format Markdown yang valid (contoh: [Judul Sumber](URL)) di dalam rangkuman atau di bagian akhir (bagian Sumber/Referensi). JANGAN hilangkan link yang ada!
+3. Jawab langsung dalam bahasa Indonesia yang natural, terstruktur dengan bullet point/tabel jika relevan, BUKAN format JSON.
+4. Jika data mentah memuat fakta yang menjawab pertanyaan pengguna, gunakan data tersebut sebaik-baiknya.`;
 
                 try {
                     const currentTime = new Date().toLocaleString('id-ID', {

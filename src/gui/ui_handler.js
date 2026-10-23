@@ -748,6 +748,43 @@ chatMessages.addEventListener('click', (e) => {
     if (code) renderFileView(`snippet.${lang}`, code);
 });
 
+// Copy message button handler (event delegation)
+chatMessages.addEventListener('click', async (e) => {
+    const copyBtn = e.target.closest('.copy-message-btn');
+    if (!copyBtn) return;
+
+    const wrapper = copyBtn.closest('.ai-message-wrapper') || copyBtn.closest('.flex-1');
+    const msgTextEl = wrapper ? wrapper.querySelector('.message-text') : null;
+    if (!msgTextEl) return;
+
+    // Bersihkan teks dari spasi berlebih
+    const textToCopy = (msgTextEl.innerText || msgTextEl.textContent || '').trim();
+    if (!textToCopy) return;
+
+    try {
+        if (window.jarvis && window.jarvis.copyToClipboard) {
+            await window.jarvis.copyToClipboard(textToCopy);
+        } else if (navigator.clipboard) {
+            await navigator.clipboard.writeText(textToCopy);
+        }
+
+        const iconSpan = copyBtn.querySelector('.material-symbols-outlined');
+        const labelSpan = copyBtn.querySelector('.copy-label');
+        
+        if (iconSpan) iconSpan.textContent = 'check';
+        if (labelSpan) labelSpan.textContent = 'Tersalin!';
+        copyBtn.classList.add('text-green-600');
+
+        setTimeout(() => {
+            if (iconSpan) iconSpan.textContent = 'content_copy';
+            if (labelSpan) labelSpan.textContent = 'Salin';
+            copyBtn.classList.remove('text-green-600');
+        }, 2000);
+    } catch (err) {
+        console.error('Gagal menyalin pesan:', err);
+    }
+});
+
 // ===================== IMAGE ATTACHMENT =====================
 attachBtn?.addEventListener('click', () => imageInput.click());
 

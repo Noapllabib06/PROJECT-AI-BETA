@@ -13,6 +13,22 @@
 * { margin: 0; padding: 0; box-sizing: border-box; }
 body { user-select: none; }
 
+/* ============ TEXT SELECTION OVERRIDES ============ */
+#chatMessages,
+#chatMessages *,
+.message-text,
+.message-text *,
+.code-editor,
+pre, code,
+textarea, input {
+    user-select: text !important;
+    -webkit-user-select: text !important;
+}
+
+.message-text {
+    cursor: text;
+}
+
 /* ============ PULSE ANIMATION (status dot) ============ */
 .pulse-dot {
     animation: pulse 2s infinite;

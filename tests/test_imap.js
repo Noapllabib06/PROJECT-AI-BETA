@@ -1,5 +1,5 @@
 const imaps = require('imap-simple');
-const credentialManager = require('./src/utils/credentials');
+const credentialManager = require('../src/utils/credentials');
 const PROVIDER_HOSTS = new Map([
     ['gmail', { host: 'imap.gmail.com', port: 993 }]
 ]);
