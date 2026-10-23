@@ -225,6 +225,8 @@ Buka terminal dan unduh model utama yang digunakan oleh JARVIS:
 ```bash
 # Model Utama (Pemikiran, Alat, & Percakapan)
 ollama pull qwen2.5:7b
+atau
+ollama pull qwen2.5-coder:7b
 
 # (Opsional) Model Cepat / Ringan untuk RAM terbatas
 ollama pull llama3.2:latest
