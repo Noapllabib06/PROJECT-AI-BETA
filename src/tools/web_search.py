@@ -6,6 +6,7 @@ Consolidates:
 - src/tools/yt_tools.js
 """
 
+import os
 import re
 import urllib.parse
 import webbrowser
@@ -14,9 +15,135 @@ import httpx
 from bs4 import BeautifulSoup
 from duckduckgo_search import DDGS
 
-from config.settings import get_logger
+from config.settings import settings, get_logger
 
 logger = get_logger("WebSearchTools")
+
+
+# ==========================================
+# Query Normalization & Multi-Engine Helpers
+# ==========================================
+
+def clean_search_query(raw_query: str) -> str:
+    """Removes Indonesian polite/conversational filler words for optimal search engine relevance."""
+    if not raw_query:
+        return ""
+    cleaned = raw_query.strip()
+    cleaned = re.sub(
+        r"^(?:tolong\s+|coba\s+|bisa\s+|mohon\s+)*(?:carikan|cariin|cari)?\s*(?:di\s+internet|di\s+web|info\s+tentang|informasi\s+tentang|tentang)?\s*",
+        "",
+        cleaned,
+        flags=re.IGNORECASE,
+    )
+    cleaned = re.sub(
+        r"\b(?:di\s+internet|di\s+web|di\s+google|dong|ya|sih|kah)\b",
+        "",
+        cleaned,
+        flags=re.IGNORECASE,
+    )
+    cleaned = re.sub(r"\s+", " ", cleaned).strip()
+    return cleaned or raw_query.strip()
+
+
+async def search_google_custom(query: str, max_results: int = 5) -> List[Dict[str, str]]:
+    """Searches using official Google Custom Search JSON API if API key and CX are configured."""
+    api_key = (getattr(settings, "google_search_api_key", None) or os.getenv("GOOGLE_SEARCH_API_KEY") or "").strip()
+    cx = (getattr(settings, "google_search_cx", None) or os.getenv("GOOGLE_SEARCH_CX") or "").strip()
+
+    if not api_key or not cx:
+        return []
+
+    try:
+        url = "https://www.googleapis.com/customsearch/v1"
+        params = {
+            "key": api_key,
+            "cx": cx,
+            "q": query,
+            "num": min(max_results, 10),
+            "hl": "id",
+            "gl": "id",
+        }
+        async with httpx.AsyncClient(timeout=8.0) as client:
+            resp = await client.get(url, params=params)
+            if resp.status_code == 200:
+                data = resp.json()
+                items = data.get("items", [])
+                results = []
+                for item in items:
+                    title = item.get("title", "").strip()
+                    link = item.get("link", "").strip()
+                    snippet = item.get("snippet", "").strip()
+                    if title and link:
+                        results.append({
+                            "source": "Google Search",
+                            "title": title,
+                            "link": link,
+                            "snippet": snippet
+                        })
+                if results:
+                    logger.info(f"Google Custom Search returned {len(results)} items for '{query}'")
+                return results
+            else:
+                logger.warning(f"Google Custom Search API status {resp.status_code}: {resp.text[:150]}")
+    except Exception as e:
+        logger.warning(f"Google Custom Search error: {e}")
+    return []
+
+
+async def search_google_news(query: str, max_results: int = 4) -> List[Dict[str, str]]:
+    """Searches live Google News RSS (zero API key required, reliable Indonesian current events)."""
+    try:
+        url = f"https://news.google.com/rss/search?q={urllib.parse.quote(query)}&hl=id&gl=ID&ceid=ID:id"
+        headers = {"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"}
+        async with httpx.AsyncClient(timeout=7.0) as client:
+            resp = await client.get(url, headers=headers)
+            if resp.status_code == 200:
+                soup = BeautifulSoup(resp.text, "xml")
+                items = []
+                for item in soup.find_all("item")[:max_results]:
+                    title_elem = item.find("title")
+                    link_elem = item.find("link")
+                    pub_elem = item.find("pubDate")
+                    source_elem = item.find("source")
+
+                    title = title_elem.text.strip() if title_elem else ""
+                    link = link_elem.text.strip() if link_elem else ""
+                    pub = pub_elem.text.strip() if pub_elem else ""
+                    src_name = source_elem.text.strip() if source_elem else "Google News"
+
+                    if title and link:
+                        items.append({
+                            "source": f"Google News ({src_name})",
+                            "title": title,
+                            "link": link,
+                            "snippet": f"Waktu: {pub}" if pub else ""
+                        })
+                return items
+    except Exception as e:
+        logger.debug(f"Google News RSS search warning: {e}")
+    return []
+
+
+async def search_duckduckgo(query: str, max_results: int = 5) -> List[Dict[str, str]]:
+    """Searches web via DuckDuckGo."""
+    results = []
+    try:
+        with DDGS() as ddgs:
+            raw_results = list(ddgs.text(query, max_results=max_results))
+            for r in raw_results:
+                title = r.get("title", "").strip()
+                snippet = r.get("body", "").strip()
+                link = r.get("href", "").strip()
+                if title and link:
+                    results.append({
+                        "source": "Web (DuckDuckGo)",
+                        "title": title,
+                        "link": link,
+                        "snippet": snippet
+                    })
+    except Exception as e:
+        logger.debug(f"DuckDuckGo search error: {e}")
+    return results
 
 
 # ==========================================
@@ -24,29 +151,58 @@ logger = get_logger("WebSearchTools")
 # ==========================================
 
 async def search_web(query: str, max_results: int = 5) -> str:
-    """Searches the live web using DuckDuckGo with fallback to HTML parsing."""
+    """Searches the live web using Google Custom Search API, Google News RSS, or DuckDuckGo."""
     if not query or not query.strip():
         return "❌ Kueri pencarian tidak boleh kosong."
 
-    logger.info(f"Searching web for: '{query}'")
-    try:
-        results = []
-        with DDGS() as ddgs:
-            raw_results = list(ddgs.text(query.strip(), max_results=max_results))
-            for r in raw_results:
-                title = r.get("title", "")
-                snippet = r.get("body", "")
-                link = r.get("href", "")
-                results.append(f"**[{title}]({link})**\n{snippet}\n")
+    clean_q = clean_search_query(query)
+    logger.info(f"Searching web for: '{query}' (cleaned: '{clean_q}')")
 
-        if results:
-            return "🌐 **Hasil Pencarian Web:**\n\n" + "\n".join(results)
-        return f"Tidak ditemukan hasil web yang relevan untuk: '{query}'"
+    has_google_credentials = bool(
+        (getattr(settings, "google_search_api_key", None) or os.getenv("GOOGLE_SEARCH_API_KEY"))
+        and (getattr(settings, "google_search_cx", None) or os.getenv("GOOGLE_SEARCH_CX"))
+    )
 
-    except Exception as e:
-        logger.error(f"Search web error: {e}")
-        # Direct Wikipedia or duckduckgo html fallback
-        return await search_wikipedia(query)
+    combined_results: List[Dict[str, str]] = []
+
+    # 1. Official Google Custom Search JSON API (Primary if configured)
+    if has_google_credentials:
+        google_results = await search_google_custom(clean_q, max_results=max_results)
+        combined_results.extend(google_results)
+
+    # 2. If Google Custom API is unconfigured or returned no items, use Google News RSS + DuckDuckGo
+    if not combined_results:
+        news_results = await search_google_news(clean_q, max_results=3)
+        ddg_results = await search_duckduckgo(clean_q, max_results=max_results)
+
+        # Merge unique links
+        seen_links = set()
+        for item in news_results + ddg_results:
+            link = item.get("link", "")
+            if link and link not in seen_links:
+                seen_links.add(link)
+                combined_results.append(item)
+
+    # 3. Format output
+    if combined_results:
+        formatted = []
+        for idx, item in enumerate(combined_results[:max_results], 1):
+            source = item.get("source", "Web")
+            title = item.get("title", "")
+            link = item.get("link", "")
+            snippet = item.get("snippet", "")
+            snippet_str = f"\n   {snippet}" if snippet else ""
+            formatted.append(f"{idx}. **[{title}]({link})** — *{source}*{snippet_str}\n")
+
+        footer = ""
+        if not has_google_credentials:
+            footer = "\n\n💡 *Tip: Masukkan GOOGLE_SEARCH_API_KEY & GOOGLE_SEARCH_CX di file .env untuk hasil pencarian Google resmi indeks penuh.*"
+
+        return f"🌐 **Hasil Pencarian Web ({len(formatted)} hasil):**\n\n" + "\n".join(formatted) + footer
+
+    # 4. Fallback to Wikipedia if web engines returned nothing
+    logger.info("Search engines returned no items, falling back to Wikipedia.")
+    return await search_wikipedia(clean_q)
 
 
 async def search_wikipedia(query: str) -> str:
