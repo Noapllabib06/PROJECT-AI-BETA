@@ -109,7 +109,7 @@ async def update_settings(payload: Dict[str, Any] = Body(...)):
         orchestrator.base_agent.temperature = settings.llm.temperature
 
     active_model = getattr(orchestrator.base_agent, "model_name", settings.llm.default_model)
-    return {"success": True, "activeModel": active_model}
+    return {"success": True, "activeModel": active_model, "temperature": settings.llm.temperature}
 
 
 @app.get("/api/models")

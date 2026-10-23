@@ -47,9 +47,9 @@ class LLMSettings(BaseModel):
     vision_model: str = "llava:7b"
     embedding_model: str = "sentence-transformers/all-MiniLM-L6-v2"
     embedding_dim: int = 384
-    temperature: float = 0.7
+    temperature: float = 0.3
     num_ctx: int = 8192
-    top_p: float = 0.9
+    top_p: float = 0.85
 
 
 class CloudFallbackSettings(BaseModel):

@@ -194,7 +194,7 @@ class AgentGraph:
                     state.synthesized_answer = await self.base_agent.a_generate(
                         prompt=user_query,
                         system_prompt=SYNTHESIS_SYSTEM_PROMPT,
-                        temperature=0.5
+                        temperature=settings.llm.temperature
                     )
                 except Exception:
                     state.synthesized_answer = raw_chat_output
@@ -224,7 +224,7 @@ DILARANG menggunakan format JSON atau menyebutkan label internal sistem."""
                 state.synthesized_answer = await self.base_agent.a_generate(
                     prompt=synthesis_prompt,
                     system_prompt=SYNTHESIS_SYSTEM_PROMPT,
-                    temperature=0.4
+                    temperature=settings.llm.temperature
                 )
             except Exception as e:
                 logger.error(f"Synthesis failed: {e}")

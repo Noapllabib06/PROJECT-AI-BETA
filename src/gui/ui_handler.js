@@ -48,6 +48,8 @@ const cancelSettingsBtn = document.getElementById('cancelSettingsBtn');
 const saveSettingsBtn = document.getElementById('saveSettingsBtn');
 const modelSelect = document.getElementById('modelSelect');
 const refreshModelsBtn = document.getElementById('refreshModelsBtn');
+const tempSlider = document.getElementById('tempSlider');
+const tempValueLabel = document.getElementById('tempValueLabel');
 
 // ===================== STATE =====================
 const TOOL_LABELS = {
@@ -96,9 +98,17 @@ closeCodeBtn?.addEventListener('click', () => {
 // ===================== SETTINGS MODAL =====================
 async function loadSettings() {
     const settings = await window.jarvis.getSettings();
-    if (settings && settings.activeModel) {
-        activeModelLabel.textContent = `${settings.activeModel} · Local`;
-        modelSelect.value = settings.activeModel;
+    if (settings) {
+        if (settings.activeModel) {
+            activeModelLabel.textContent = `${settings.activeModel} · Local`;
+            modelSelect.value = settings.activeModel;
+        }
+        if (settings.temperature !== undefined && tempSlider) {
+            tempSlider.value = settings.temperature;
+            if (tempValueLabel) {
+                tempValueLabel.textContent = Number(settings.temperature).toFixed(2);
+            }
+        }
     }
 }
 
@@ -118,13 +128,19 @@ async function fetchOllamaModels() {
                 modelSelect.appendChild(opt);
             });
         }
-        await loadSettings(); // Re-select active model after populating
+        await loadSettings(); // Re-select active model and temperature after populating
     } catch (e) {
         modelSelect.innerHTML = '<option value="">Error fetching models</option>';
     } finally {
         modelSelect.disabled = false;
     }
 }
+
+tempSlider?.addEventListener('input', () => {
+    if (tempValueLabel) {
+        tempValueLabel.textContent = Number(tempSlider.value).toFixed(2);
+    }
+});
 
 settingsBtn?.addEventListener('click', () => {
     settingsModal.classList.remove('hidden');
@@ -139,10 +155,16 @@ refreshModelsBtn?.addEventListener('click', fetchOllamaModels);
 
 saveSettingsBtn?.addEventListener('click', async () => {
     const selectedModel = modelSelect.value;
+    const tempVal = tempSlider ? parseFloat(tempSlider.value) : undefined;
+    const payload = {};
     if (selectedModel) {
-        await window.jarvis.saveSettings({ activeModel: selectedModel });
+        payload.activeModel = selectedModel;
         activeModelLabel.textContent = `${selectedModel} · Local`;
     }
+    if (tempVal !== undefined && !isNaN(tempVal)) {
+        payload.temperature = tempVal;
+    }
+    await window.jarvis.saveSettings(payload);
     closeSettings();
 });
 

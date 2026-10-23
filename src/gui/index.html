@@ -391,6 +391,20 @@
                     </div>
                     <p class="text-[12px] text-secondary mt-1">Select an AI model installed in your local Ollama instance.</p>
                 </div>
+
+                <div class="space-y-2 pt-3 border-t border-border-subtle">
+                    <div class="flex items-center justify-between">
+                        <label class="block font-label-sm text-label-sm text-on-surface-variant font-medium">Temperature (Kualitas & Kreativitas)</label>
+                        <span id="tempValueLabel" class="text-xs px-2.5 py-0.5 rounded font-mono font-bold bg-action-orange-vibrant/10 text-action-orange-vibrant">0.30</span>
+                    </div>
+                    <input id="tempSlider" type="range" min="0.0" max="1.0" step="0.05" value="0.30" class="w-full accent-action-orange-vibrant cursor-pointer">
+                    <div class="flex justify-between text-[11px] text-secondary">
+                        <span>0.0 (Presisi/Kaku)</span>
+                        <span class="text-action-orange-vibrant font-semibold">0.30 (Optimal Terbaik)</span>
+                        <span>1.0 (Kreatif/Bebas)</span>
+                    </div>
+                    <p class="text-[11px] text-secondary mt-1">Suhu <strong>0.30</strong> menghasilkan konsistensi logika, struktur markdown yang rapi, dan akurasi fakta terbaik untuk Qwen/LLaMA.</p>
+                </div>
             </div>
             <div class="p-4 border-t border-border-subtle bg-surface-container-low flex justify-end gap-3">
                 <button id="cancelSettingsBtn" class="px-4 py-2 rounded-lg font-label-sm text-secondary hover:bg-surface-container-high transition-colors">Batal</button>
