@@ -98,6 +98,8 @@ class AppSettings(BaseSettings):
     openai_api_key: Optional[str] = Field(default=None, validation_alias="OPENAI_API_KEY")
     google_search_api_key: Optional[str] = Field(default=None, validation_alias="GOOGLE_SEARCH_API_KEY")
     google_search_cx: Optional[str] = Field(default=None, validation_alias="GOOGLE_SEARCH_CX")
+    serper_api_key: Optional[str] = Field(default=None, validation_alias="SERPER_API_KEY")
+    tavily_api_key: Optional[str] = Field(default=None, validation_alias="TAVILY_API_KEY")
 
     # Sub-configs populated from YAML
     agent: AgentSettings = Field(default_factory=AgentSettings)

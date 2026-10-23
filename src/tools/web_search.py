@@ -124,6 +124,100 @@ async def search_google_news(query: str, max_results: int = 4) -> List[Dict[str,
     return []
 
 
+async def search_serper_google(query: str, max_results: int = 5) -> List[Dict[str, str]]:
+    """Searches using Serper.dev (Real Google Search engine for AI, 2500 free queries without credit card)."""
+    api_key = (getattr(settings, "serper_api_key", None) or os.getenv("SERPER_API_KEY") or "").strip()
+    if not api_key:
+        return []
+
+    try:
+        url = "https://google.serper.dev/search"
+        payload = {
+            "q": query,
+            "gl": "id",
+            "hl": "id",
+            "num": min(max_results, 10),
+        }
+        headers = {
+            "X-API-KEY": api_key,
+            "Content-Type": "application/json",
+        }
+        async with httpx.AsyncClient(timeout=8.0) as client:
+            resp = await client.post(url, json=payload, headers=headers)
+            if resp.status_code == 200:
+                data = resp.json()
+                results = []
+                # Knowledge Graph if available
+                kg = data.get("knowledgeGraph")
+                if kg and kg.get("title") and kg.get("description"):
+                    results.append({
+                        "source": "Google Knowledge Graph",
+                        "title": kg.get("title", ""),
+                        "link": kg.get("website") or kg.get("descriptionUrl") or "https://www.google.com",
+                        "snippet": kg.get("description", "")
+                    })
+                # Organic Google results
+                for item in data.get("organic", []):
+                    title = item.get("title", "").strip()
+                    link = item.get("link", "").strip()
+                    snippet = item.get("snippet", "").strip()
+                    if title and link:
+                        results.append({
+                            "source": "Google Search (Serper)",
+                            "title": title,
+                            "link": link,
+                            "snippet": snippet
+                        })
+                if results:
+                    logger.info(f"Serper.dev returned {len(results)} Google results for '{query}'")
+                return results
+            else:
+                logger.warning(f"Serper.dev status {resp.status_code}: {resp.text[:150]}")
+    except Exception as e:
+        logger.warning(f"Serper search error: {e}")
+    return []
+
+
+async def search_tavily(query: str, max_results: int = 5) -> List[Dict[str, str]]:
+    """Searches using Tavily AI Search (1000 free queries/month designed for LLMs)."""
+    api_key = (getattr(settings, "tavily_api_key", None) or os.getenv("TAVILY_API_KEY") or "").strip()
+    if not api_key:
+        return []
+
+    try:
+        url = "https://api.tavily.com/search"
+        payload = {
+            "api_key": api_key,
+            "query": query,
+            "search_depth": "basic",
+            "max_results": min(max_results, 10),
+        }
+        async with httpx.AsyncClient(timeout=8.0) as client:
+            resp = await client.post(url, json=payload)
+            if resp.status_code == 200:
+                data = resp.json()
+                results = []
+                for item in data.get("results", []):
+                    title = item.get("title", "").strip()
+                    link = item.get("url", "").strip()
+                    snippet = item.get("content", "").strip()
+                    if title and link:
+                        results.append({
+                            "source": "Tavily AI Search",
+                            "title": title,
+                            "link": link,
+                            "snippet": snippet
+                        })
+                if results:
+                    logger.info(f"Tavily returned {len(results)} items for '{query}'")
+                return results
+            else:
+                logger.warning(f"Tavily status {resp.status_code}: {resp.text[:150]}")
+    except Exception as e:
+        logger.warning(f"Tavily search error: {e}")
+    return []
+
+
 async def search_duckduckgo(query: str, max_results: int = 5) -> List[Dict[str, str]]:
     """Searches web via DuckDuckGo."""
     results = []
@@ -158,19 +252,32 @@ async def search_web(query: str, max_results: int = 5) -> str:
     clean_q = clean_search_query(query)
     logger.info(f"Searching web for: '{query}' (cleaned: '{clean_q}')")
 
-    has_google_credentials = bool(
-        (getattr(settings, "google_search_api_key", None) or os.getenv("GOOGLE_SEARCH_API_KEY"))
-        and (getattr(settings, "google_search_cx", None) or os.getenv("GOOGLE_SEARCH_CX"))
+    has_api_credentials = bool(
+        (getattr(settings, "serper_api_key", None) or os.getenv("SERPER_API_KEY"))
+        or (getattr(settings, "tavily_api_key", None) or os.getenv("TAVILY_API_KEY"))
+        or (
+            (getattr(settings, "google_search_api_key", None) or os.getenv("GOOGLE_SEARCH_API_KEY"))
+            and (getattr(settings, "google_search_cx", None) or os.getenv("GOOGLE_SEARCH_CX"))
+        )
     )
 
     combined_results: List[Dict[str, str]] = []
 
-    # 1. Official Google Custom Search JSON API (Primary if configured)
-    if has_google_credentials:
+    # 1. Serper.dev (Real Google Search Engine for AI, 2,500 free queries)
+    serper_results = await search_serper_google(clean_q, max_results=max_results)
+    combined_results.extend(serper_results)
+
+    # 2. Tavily AI Search (Specialized AI search engine, 1,000 free queries/mo)
+    if not combined_results:
+        tavily_results = await search_tavily(clean_q, max_results=max_results)
+        combined_results.extend(tavily_results)
+
+    # 3. Google Custom Search JSON API (Legacy Google Search)
+    if not combined_results:
         google_results = await search_google_custom(clean_q, max_results=max_results)
         combined_results.extend(google_results)
 
-    # 2. If Google Custom API is unconfigured or returned no items, use Google News RSS + DuckDuckGo
+    # 4. Zero-Key Fallbacks: Live Google News RSS + DuckDuckGo
     if not combined_results:
         news_results = await search_google_news(clean_q, max_results=3)
         ddg_results = await search_duckduckgo(clean_q, max_results=max_results)
@@ -183,7 +290,7 @@ async def search_web(query: str, max_results: int = 5) -> str:
                 seen_links.add(link)
                 combined_results.append(item)
 
-    # 3. Format output
+    # 5. Format output
     if combined_results:
         formatted = []
         for idx, item in enumerate(combined_results[:max_results], 1):
@@ -195,8 +302,8 @@ async def search_web(query: str, max_results: int = 5) -> str:
             formatted.append(f"{idx}. **[{title}]({link})** — *{source}*{snippet_str}\n")
 
         footer = ""
-        if not has_google_credentials:
-            footer = "\n\n💡 *Tip: Masukkan GOOGLE_SEARCH_API_KEY & GOOGLE_SEARCH_CX di file .env untuk hasil pencarian Google resmi indeks penuh.*"
+        if not has_api_credentials:
+            footer = "\n\n💡 *Tip: Google Search API lama ditutup untuk pendaftar baru. Dapatkan SERPER_API_KEY (Google Search asli 2.500 gratis di https://serper.dev) atau pasang di .env untuk hasil Google terlengkap.*"
 
         return f"🌐 **Hasil Pencarian Web ({len(formatted)} hasil):**\n\n" + "\n".join(formatted) + footer
 
