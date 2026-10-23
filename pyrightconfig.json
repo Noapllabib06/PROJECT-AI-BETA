@@ -1,4 +1,8 @@
 {
     "venvPath": ".",
-    "venv": "venv"
+    "venv": "venv",
+    "extraPaths": [
+        "."
+    ],
+    "reportMissingTypeStubs": false
 }

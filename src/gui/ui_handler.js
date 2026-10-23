@@ -60,7 +60,8 @@ const TOOL_LABELS = {
     open_app: 'Aplikasi', control_volume: 'Sistem',
     take_screenshot: 'Screenshot', analyze_screen: 'Vision',
     save_memory: 'Memori', search_memory: 'Memori',
-    save_credential: 'Kredensial', list_credentials: 'Kredensial', delete_credential: 'Kredensial'
+    save_credential: 'Kredensial', list_credentials: 'Kredensial', delete_credential: 'Kredensial',
+    get_jarvis_capabilities: 'Info Sistem'
 };
 
 const TOOL_ICONS = {
@@ -69,7 +70,7 @@ const TOOL_ICONS = {
     'File': 'description', 'Kode': 'code', 'Aplikasi': 'apps',
     'Sistem': 'settings', 'Screenshot': 'screenshot_monitor',
     'Vision': 'visibility', 'Memori': 'psychology',
-    'Kredensial': 'key'
+    'Kredensial': 'key', 'Info Sistem': 'info'
 };
 
 let activeConversationId = null;
@@ -163,30 +164,56 @@ userInput?.addEventListener('input', function () {
  * enak dibaca manusia di panel Thinking Process.
  */
 function formatTraceStep(step) {
-    switch (step.type) {
+    if (!step) return 'Memproses langkah...';
+    if (typeof step === 'string') return step;
+    const type = step.type || step.step || 'info';
+    switch (type) {
         case 'routing': {
-            const tools = (step.toolsConsidered || []).join(', ') || '(tidak ada, mode chat biasa)';
-            const cats = Object.keys(step.categoryScores || {}).join(', ') || '-';
-            return `🧭 Kategori terpilih: ${cats} → Tool dipertimbangkan: ${tools}`;
+            const tools = (step.toolsConsidered || (step.details && step.details.tools) || []).join(', ') || '(tidak ada, mode chat biasa)';
+            const cats = step.categoryScores ? Object.keys(step.categoryScores).join(', ') : (step.message || '-');
+            return `🧭 Analisis Rute: ${cats} → Tool dipertimbangkan: ${tools}`;
         }
+        case 'routing_completed': {
+            const tools = (step.tools || (step.details && step.details.tools) || []).join(', ') || '(chat biasa)';
+            return `🧭 Kandidat tool terpilih: ${tools}`;
+        }
+        case 'memory_retrieval':
+            return `🧠 Mengakses memori dan basis pengetahuan RAG...`;
+        case 'planning':
+            return `📋 Perencanaan tugas: ${step.message || step.content || 'Dekomposisi langkah'}`;
         case 'tool_call': {
-            const list = (step.tools || []).map(t => `${t.tool}("${t.query}")`).join(', ');
+            const list = (step.tools || []).map(t => `${t.tool}("${t.query || ''}")`).join(', ');
             return `⚙️ Menjalankan: ${list}`;
         }
-        case 'reasoning': {
-            return `🧠 Memikirkan aksi:\n<div class="mt-1 p-2 bg-black/5 rounded text-xs font-code-snippet">${escapeHtml(step.content).replace(/\n/g, '<br>')}</div>`;
+        case 'tool_execution':
+            return `⚙️ ${step.message || 'Mengeksekusi tool...'}`;
+        case 'tool_decision':
+            return `🎯 Keputusan tool: ${step.message || step.content}`;
+        case 'reasoning':
+        case 'llm_reasoning': {
+            const txt = step.content || step.message || '';
+            return `🧠 Memikirkan aksi:\n<div class="mt-1 p-2 bg-black/5 rounded text-xs font-code-snippet">${escapeHtml(txt).replace(/\n/g, '<br>')}</div>`;
         }
         case 'tool_result': {
             return (step.results || []).map(r =>
                 r.success ? `✅ ${r.tool} berhasil` : `❌ ${r.tool} gagal: ${r.error || 'unknown error'}`
             ).join('\n');
         }
+        case 'tool_warning':
+            return `⚠️ ${step.message || 'Peringatan eksekusi tool'}`;
         case 'retry':
-            return `🔁 Percobaan ulang #${step.attempt} — alasan: ${step.reason}`;
+            return `🔁 Percobaan ulang #${step.attempt || 1} — alasan: ${step.reason || step.message || 'koreksi otomatis'}`;
+        case 'self_correction':
+            return `🔁 Koreksi mandiri: ${step.message || 'Memperbaiki format respons...'}`;
+        case 'supervision':
+            return `🛡️ Supervisi: Memvalidasi kualitas jawaban...`;
+        case 'completed':
+            return `✔️ Proses selesai dan respons tervalidasi.`;
         case 'stale_knowledge_override':
             return `⏱️ Info berpotensi usang, dialihkan ke pencarian web`;
         case 'synthesis_start':
-            return `📝 Merangkum hasil tool jadi jawaban akhir...`;
+        case 'synthesis':
+            return `📝 Merangkum hasil jadi jawaban akhir...`;
         case 'done':
             return `✔️ Selesai.`;
         case 'chat_response':
@@ -194,25 +221,38 @@ function formatTraceStep(step) {
         case 'final_fallback':
             return `⚠️ Gagal semua percobaan — kirim fallback.`;
         case 'error':
-            return `❌ Error: ${step.message || 'Tidak diketahui'}`;
+            return `❌ Error: ${step.message || step.content || 'Tidak diketahui'}`;
         default:
-            return `• ${step.type}`;
+            return step.message || step.content || (type && type !== 'undefined' ? `• ${type}` : 'Memproses langkah...');
     }
 }
 
 function traceStepLabel(step) {
-    switch (step.type) {
-        case 'routing': return 'Menganalisis permintaan...';
-        case 'reasoning': return 'Memutuskan langkah...';
-        case 'tool_call': return 'Menjalankan tool...';
+    if (!step) return 'Memproses...';
+    if (typeof step === 'string') return step;
+    const type = step.type || step.step || 'info';
+    switch (type) {
+        case 'routing':
+        case 'routing_completed': return 'Menganalisis permintaan...';
+        case 'memory_retrieval': return 'Mencari memori...';
+        case 'planning': return 'Menyusun rencana...';
+        case 'reasoning':
+        case 'llm_reasoning': return 'Memutuskan langkah...';
+        case 'tool_call':
+        case 'tool_execution': return 'Menjalankan tool...';
+        case 'tool_decision': return 'Memilih tindakan...';
         case 'tool_result': return 'Memproses hasil tool...';
-        case 'retry': return `Mencoba ulang (percobaan ${step.attempt})...`;
-        case 'synthesis_start': return 'Merangkum hasil...';
+        case 'retry':
+        case 'self_correction': return `Mencoba ulang (percobaan ${step.attempt || 1})...`;
+        case 'supervision': return 'Memvalidasi output...';
+        case 'completed':
         case 'done': return 'Proses berpikir selesai';
+        case 'synthesis_start':
+        case 'synthesis': return 'Merangkum hasil...';
         case 'chat_response': return 'Menjawab langsung';
         case 'final_fallback': return 'Gagal setelah beberapa percobaan';
         case 'error': return 'Terjadi kesalahan';
-        default: return 'Memproses...';
+        default: return step.message || 'Memproses...';
     }
 }
 
@@ -353,23 +393,61 @@ function renderFileDraft(filename, content) {
         try {
             const data = JSON.parse(content);
             const container = document.createElement('div');
-            container.className = 'absolute inset-0 flex flex-col hidden';
+            container.className = 'absolute inset-0 flex flex-col hidden bg-[#0f0f0f]';
             
-            const tabTitle = data.type === 'music' ? 'YouTube Music' : 'YouTube Video';
-            const tabType = data.type === 'music' ? 'youtube-music' : 'youtube-video';
-            const tabId = `youtube-${data.videoId}`;
+            const isMusic = data.type === 'music';
+            const tabTitle = isMusic 
+                ? (data.title ? `🎵 ${data.title}` : 'YouTube Music') 
+                : (data.title ? `▶️ ${data.title}` : 'YouTube Video');
+            const tabType = isMusic ? 'youtube-music' : 'youtube-video';
+            const tabId = `youtube-${data.videoId || Date.now()}`;
             
-            const webview = document.createElement('webview');
+            const directUrl = data.url || (isMusic 
+                ? (data.videoId && data.videoId !== 'search' 
+                    ? `https://music.youtube.com/watch?v=${data.videoId}` 
+                    : `https://music.youtube.com/search?q=${encodeURIComponent(data.title || '')}`)
+                : (data.videoId && data.videoId !== 'search' 
+                    ? `https://www.youtube.com/watch?v=${data.videoId}` 
+                    : `https://www.youtube.com/results?search_query=${encodeURIComponent(data.title || '')}`));
             
-            if (data.type === 'music') {
-                webview.src = `https://music.youtube.com/watch?v=${data.videoId}`;
+            // Header bar with external app link
+            const header = document.createElement('div');
+            header.className = 'flex items-center justify-between px-4 py-2.5 bg-[#181818] border-b border-[#2e2e2e] text-xs text-[#f1f1f1] select-none';
+            header.innerHTML = `
+                <div class="flex items-center gap-2 truncate pr-2">
+                    <span class="material-symbols-outlined text-red-500 text-[18px] shrink-0">${isMusic ? 'music_note' : 'smart_display'}</span>
+                    <span class="font-medium truncate">${escapeHtml(data.title || (isMusic ? 'YouTube Music Player' : 'YouTube Video Player'))}</span>
+                </div>
+                <a href="${directUrl}" target="_blank" rel="noopener noreferrer" class="px-2.5 py-1 bg-[#cc0000] hover:bg-red-700 text-white rounded font-medium flex items-center gap-1.5 transition-colors shrink-0 shadow-sm">
+                    <span>${isMusic ? 'Buka YT Music' : 'Buka YouTube'}</span>
+                    <span class="material-symbols-outlined text-[13px]">open_in_new</span>
+                </a>
+            `;
+            container.appendChild(header);
+
+            if (data.videoId && data.videoId !== 'search') {
+                const iframe = document.createElement('iframe');
+                // Standard responsive YouTube embed with autoplay and API support
+                iframe.src = `https://www.youtube-nocookie.com/embed/${data.videoId}?autoplay=1&enablejsapi=1`;
+                iframe.className = 'flex-1 w-full border-0 bg-black';
+                iframe.setAttribute('allow', 'accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share');
+                iframe.setAttribute('allowfullscreen', 'true');
+                container.appendChild(iframe);
             } else {
-                webview.src = `https://www.youtube.com/watch?v=${data.videoId}`;
+                const emptyState = document.createElement('div');
+                emptyState.className = 'flex-1 flex flex-col items-center justify-center p-6 text-center text-gray-400 gap-3';
+                emptyState.innerHTML = `
+                    <span class="material-symbols-outlined text-[48px] text-red-500">music_note</span>
+                    <p class="text-sm font-medium text-white">${escapeHtml(data.title || 'Pencarian Musik')}</p>
+                    <p class="text-xs text-gray-400">Membuka YouTube Music di browser...</p>
+                    <a href="${directUrl}" target="_blank" rel="noopener noreferrer" class="mt-2 px-4 py-2 bg-red-600 hover:bg-red-700 text-white rounded-lg text-xs font-semibold flex items-center gap-1.5 transition-colors">
+                        <span class="material-symbols-outlined text-[16px]">open_in_new</span>
+                        <span>Buka di YouTube Music</span>
+                    </a>
+                `;
+                container.appendChild(emptyState);
             }
             
-            webview.className = 'w-full h-full border-0 bg-black';
-            
-            container.appendChild(webview);
             createOrUpdateTab(tabId, tabTitle, container, tabType);
             return;
         } catch (e) {
@@ -381,21 +459,29 @@ function renderFileDraft(filename, content) {
         try {
             const data = JSON.parse(content);
             const container = document.createElement('div');
-            container.className = 'absolute inset-0 flex flex-col hidden';
+            container.className = 'absolute inset-0 flex flex-col hidden bg-white';
             
             let tabTitle = data.title || 'Web Page';
-            // Capitalize title appropriately
             tabTitle = tabTitle.charAt(0).toUpperCase() + tabTitle.slice(1);
-            
             const tabId = `web-${Date.now()}`;
             
-            const webview = document.createElement('webview');
-            // Persist session to allow keeping logins for WhatsApp, etc.
-            webview.partition = 'persist:jarvis';
-            webview.src = data.url;
-            webview.className = 'w-full h-full border-0 bg-white';
-            
-            container.appendChild(webview);
+            const header = document.createElement('div');
+            header.className = 'flex items-center justify-between px-4 py-2 bg-surface-container border-b border-border-subtle text-xs text-on-surface';
+            header.innerHTML = `
+                <span class="font-medium truncate flex-1">${escapeHtml(data.url || '')}</span>
+                <a href="${data.url}" target="_blank" rel="noopener noreferrer" class="ml-2 text-primary hover:underline flex items-center gap-1 font-semibold">
+                    <span>Buka Tab Baru</span>
+                    <span class="material-symbols-outlined text-[14px]">open_in_new</span>
+                </a>
+            `;
+            container.appendChild(header);
+
+            const iframe = document.createElement('iframe');
+            iframe.src = data.url;
+            iframe.className = 'flex-1 w-full border-0 bg-white';
+            iframe.setAttribute('allow', 'fullscreen; clipboard-read; clipboard-write');
+            container.appendChild(iframe);
+
             createOrUpdateTab(tabId, tabTitle, container, 'web');
             return;
         } catch (e) {
@@ -496,25 +582,60 @@ function escapeHtml(text) {
 
 let codeSnippetCounter = 0;
 
+function highlightCode(code, lang) {
+    const cleanLang = (lang || '').toLowerCase().trim();
+    if (window.Prism && Prism.languages) {
+        const grammar = Prism.languages[cleanLang] || Prism.languages.javascript || Prism.languages.python;
+        if (grammar) {
+            try {
+                return Prism.highlight(code, grammar, cleanLang);
+            } catch (e) {
+                // fallback to escape
+            }
+        }
+    }
+    return escapeHtml(code);
+}
+
+function buildCodeSnippetHtml(id, language, code) {
+    const cleanLang = (language || 'text').trim();
+    const highlighted = highlightCode(code, cleanLang);
+
+    return `
+    <div class="code-snippet-box rounded-xl border border-[#333333] bg-[#1e1e1e] text-[#d4d4d4] my-3 overflow-hidden shadow-md text-left" data-id="${id}" data-lang="${escapeHtml(cleanLang)}">
+        <div class="code-header flex items-center justify-between px-3 py-1.5 bg-[#252526] border-b border-[#333333] text-xs font-mono select-none">
+            <span class="text-[#9cdcfe] font-semibold flex items-center gap-1.5">
+                <span class="material-symbols-outlined text-[15px]">code</span>
+                ${escapeHtml(cleanLang)}
+            </span>
+            <div class="flex items-center gap-1.5">
+                <button class="copy-code-btn flex items-center gap-1 text-[#cccccc] hover:text-white px-2 py-0.5 rounded hover:bg-[#333333] transition-colors" data-id="${id}" title="Salin Kode">
+                    <span class="material-symbols-outlined text-[14px]">content_copy</span>
+                    <span class="copy-code-label text-[11px]">Salin</span>
+                </button>
+                <button class="open-tab-btn flex items-center gap-1 text-[#cccccc] hover:text-white px-2 py-0.5 rounded hover:bg-[#333333] transition-colors" data-id="${id}" data-lang="${escapeHtml(cleanLang)}" title="Buka di Editor / Preview Tab">
+                    <span class="material-symbols-outlined text-[14px]">open_in_new</span>
+                    <span class="text-[11px]">Buka Tab</span>
+                </button>
+            </div>
+        </div>
+        <pre class="p-3.5 overflow-x-auto text-xs font-mono leading-relaxed m-0 text-[#d4d4d4] select-text bg-[#1e1e1e]"><code class="language-${escapeHtml(cleanLang)}">${highlighted}</code></pre>
+    </div>`.trim();
+}
+
 function extractCodeBlocksAsCards(text) {
-    const codeBlockRegex = /```([^\r\n]*?)\r?\n([\s\S]*?)```/g;
+    // Match closed ```lang\ncode``` or unclosed code block during streaming
+    const codeBlockRegex = /```([^\r\n]*?)\r?\n([\s\S]*?)(?:```|$)/g;
     let cardsHtml = [];
     const cleanedText = text.replace(codeBlockRegex, (match, lang, code) => {
         codeSnippetCounter++;
-        const id = `snippet-${codeSnippetCounter}-${Date.now()}`;
+        const id = `snippet-${codeSnippetCounter}`;
         const language = lang ? lang.trim() : 'text';
-        cardsHtml.push({ id, language, code: code.trim() });
-        return `__CODE_CARD_${id}__`;
+        const cleanCode = code.replace(/```$/, '').trim();
+        cardsHtml.push({ id, language, code: cleanCode });
+        return `__CODE_BLOCK_${id}__`;
     });
     return { cleanedText, cardsHtml };
-}
-
-function buildCodeCardHtml(id, language) {
-    return `<div class="code-card flex items-center gap-3 p-3 bg-surface-gray rounded-lg border border-border-subtle my-2 cursor-pointer hover:bg-surface-container-high transition-colors" data-id="${id}" data-lang="${language}">
-        <span class="material-symbols-outlined text-secondary" style="font-size:18px">description</span>
-        <span class="flex-1 text-sm font-medium text-on-surface font-code-snippet">Kode ${escapeHtml(language)}</span>
-        <span class="text-xs text-primary font-semibold">Lihat →</span>
-    </div>`;
 }
 
 function renderMarkdownLite(text) {
@@ -523,10 +644,19 @@ function renderMarkdownLite(text) {
     const { cleanedText, cardsHtml } = extractCodeBlocksAsCards(text);
     let html = escapeHtml(cleanedText);
 
-    html = html.replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>');
-    html = html.replace(/\[([^\]]+)\]\((https?:\/\/[^\s)]+)\)/g, '<a href="$2" target="_blank">$1</a>');
-    html = html.replace(/(?<!href="|>)(https?:\/\/[^\s<]+)/g, '<a href="$1" target="_blank">$1</a>');
+    // Headings
+    html = html.replace(/^### (.*$)/gim, '<h3 class="text-base font-bold text-on-surface mt-3 mb-1">$1</h3>');
+    html = html.replace(/^## (.*$)/gim, '<h2 class="text-lg font-bold text-on-surface mt-4 mb-2">$1</h2>');
+    html = html.replace(/^# (.*$)/gim, '<h1 class="text-xl font-bold text-on-surface mt-4 mb-2">$1</h1>');
+    html = html.replace(/^---$/gm, '<hr class="my-3 border-border-subtle">');
 
+    // Inline formatting
+    html = html.replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>');
+    html = html.replace(/`([^`\n]+)`/g, '<code class="px-1.5 py-0.5 rounded bg-black/10 dark:bg-white/10 font-mono text-xs text-action-orange-vibrant font-medium">$1</code>');
+    html = html.replace(/\[([^\]]+)\]\((https?:\/\/[^\s)]+)\)/g, '<a href="$2" target="_blank" rel="noopener noreferrer">$1</a>');
+    html = html.replace(/(?<!href="|>)(https?:\/\/[^\s<]+)/g, '<a href="$1" target="_blank" rel="noopener noreferrer">$1</a>');
+
+    // Lists
     html = html.replace(/^(\d+)\.\s+(.+)$/gm, '<li class="ol-line">$2</li>');
     html = html.replace(/^[ \t]*[•\-]\s+(.+)$/gm, '<li class="bullet-line">$1</li>');
 
@@ -536,14 +666,69 @@ function renderMarkdownLite(text) {
     html = html.replace(/\n{2,}/g, '<br>');
     html = html.replace(/\n/g, '<br>');
 
-    // Inject code cards (after escape, so HTML is safe)
-    cardsHtml.forEach(card => {
-        html = html.replace(`__CODE_CARD_${card.id}__`, buildCodeCardHtml(card.id, card.language));
-    });
-
-    // Store code snippets for retrieval on card click
+    // Store code snippets globally
     window._codeSnippets = window._codeSnippets || {};
-    cardsHtml.forEach(card => { window._codeSnippets[card.id] = card.code; });
+    cardsHtml.forEach(card => {
+        window._codeSnippets[card.id] = card.code;
+
+        if (card.language === 'snippet.youtube') {
+            try {
+                // Auto open snippet player tab in sidebar
+                renderFileDraft('snippet.youtube', card.code);
+            } catch (err) {
+                console.error("Error auto-rendering youtube draft:", err);
+            }
+
+            try {
+                const data = JSON.parse(card.code);
+                const isMusic = data.type === 'music';
+                const directUrl = data.url || (isMusic 
+                    ? (data.videoId && data.videoId !== 'search' ? `https://music.youtube.com/watch?v=${data.videoId}` : `https://music.youtube.com/search?q=${encodeURIComponent(data.title || '')}`)
+                    : (data.videoId && data.videoId !== 'search' ? `https://www.youtube.com/watch?v=${data.videoId}` : `https://www.youtube.com/results?search_query=${encodeURIComponent(data.title || '')}`));
+                const title = data.title || (isMusic ? 'YouTube Music' : 'YouTube Video');
+                
+                const widgetHtml = `
+                <div class="my-3 p-3.5 rounded-xl border border-red-500/30 bg-red-950/20 text-on-surface shadow-sm flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
+                    <div class="flex items-center gap-3">
+                        <div class="w-10 h-10 rounded-full bg-red-600/20 text-red-500 flex items-center justify-center shrink-0">
+                            <span class="material-symbols-outlined text-[24px]">${isMusic ? 'music_note' : 'smart_display'}</span>
+                        </div>
+                        <div>
+                            <div class="font-semibold text-sm text-on-surface line-clamp-1">${escapeHtml(title)}</div>
+                            <div class="text-xs text-on-surface-variant flex items-center gap-1.5 mt-0.5">
+                                <span class="font-medium text-red-400">${isMusic ? 'YouTube Music' : 'YouTube Video'}</span>
+                                • <span class="text-emerald-500 font-medium">Sedang diputar</span>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="flex items-center gap-2 self-end sm:self-auto shrink-0">
+                        <button class="open-tab-btn px-3 py-1.5 bg-surface-container-high hover:bg-surface-dim text-on-surface rounded-lg text-xs font-medium flex items-center gap-1.5 transition-colors shadow-xs" data-id="${card.id}" data-lang="snippet.youtube">
+                            <span class="material-symbols-outlined text-[15px]">side_navigation</span>
+                            <span>Buka di Panel Snippet</span>
+                        </button>
+                        <a href="${directUrl}" target="_blank" rel="noopener noreferrer" class="px-3 py-1.5 bg-red-600 hover:bg-red-700 text-white rounded-lg text-xs font-semibold flex items-center gap-1.5 transition-colors shadow-xs">
+                            <span class="material-symbols-outlined text-[15px]">open_in_new</span>
+                            <span>Buka di Browser</span>
+                        </a>
+                    </div>
+                </div>`.trim();
+                html = html.replace(`__CODE_BLOCK_${card.id}__`, widgetHtml);
+                return;
+            } catch (e) {
+                // fallback to default code snippet box
+            }
+        }
+
+        if (card.language === 'snippet.image') {
+            try {
+                renderFileDraft('snippet.image', card.code);
+            } catch (err) {
+                console.error("Error auto-rendering image draft:", err);
+            }
+        }
+
+        html = html.replace(`__CODE_BLOCK_${card.id}__`, buildCodeSnippetHtml(card.id, card.language, card.code));
+    });
 
     return html;
 }
@@ -583,11 +768,16 @@ function renderAiMessagePlaceholder() {
 }
 
 function appendTraceStepToPanel(refs, step) {
+    if (!step) return;
+    const formatted = formatTraceStep(step);
+    if (!formatted || formatted === 'undefined') return;
+
     const row = document.createElement('div');
     row.className = 'flex gap-2 py-0.5 text-xs';
-    row.innerHTML = `<span class="text-secondary/50 flex-shrink-0 mt-0.5">›</span><span>${formatTraceStep(step).replace(/\\n/g, '<br>')}</span>`;
+    row.innerHTML = `<span class="text-secondary/50 flex-shrink-0 mt-0.5">›</span><span>${formatted.replace(/\\n/g, '<br>')}</span>`;
 
-    if (step.type === 'reasoning') {
+    const stepType = step.type || step.step;
+    if (stepType === 'reasoning') {
         const lastRow = refs.thinkingBody.lastElementChild;
         if (lastRow && lastRow.dataset.type === 'reasoning') {
             lastRow.innerHTML = row.innerHTML;
@@ -738,14 +928,57 @@ userInput?.addEventListener('keydown', (e) => {
     }
 });
 
-// Code card click handler (event delegation)
-chatMessages.addEventListener('click', (e) => {
+// Code snippet action buttons (Copy code & Open in Tab)
+chatMessages.addEventListener('click', async (e) => {
+    // 1. Copy snippet button
+    const copyCodeBtn = e.target.closest('.copy-code-btn');
+    if (copyCodeBtn) {
+        const id = copyCodeBtn.dataset.id;
+        const code = window._codeSnippets?.[id] || '';
+        if (code) {
+            try {
+                if (window.jarvis && window.jarvis.copyToClipboard) {
+                    await window.jarvis.copyToClipboard(code);
+                } else if (navigator.clipboard) {
+                    await navigator.clipboard.writeText(code);
+                }
+                const icon = copyCodeBtn.querySelector('.material-symbols-outlined');
+                const label = copyCodeBtn.querySelector('.copy-code-label');
+                if (icon) icon.textContent = 'check';
+                if (label) label.textContent = 'Tersalin!';
+                copyCodeBtn.classList.add('text-green-400');
+                setTimeout(() => {
+                    if (icon) icon.textContent = 'content_copy';
+                    if (label) label.textContent = 'Salin';
+                    copyCodeBtn.classList.remove('text-green-400');
+                }, 2000);
+            } catch (err) {
+                console.error('Gagal menyalin snippet kode:', err);
+            }
+        }
+        return;
+    }
+
+    // 2. Open in Tab button
+    const openTabBtn = e.target.closest('.open-tab-btn');
+    if (openTabBtn) {
+        const id = openTabBtn.dataset.id;
+        const lang = openTabBtn.dataset.lang || 'code';
+        const code = window._codeSnippets?.[id] || '';
+        if (code) {
+            renderFileView(`snippet.${lang}`, code);
+        }
+        return;
+    }
+
+    // 3. Fallback code-card click
     const card = e.target.closest('.code-card');
-    if (!card) return;
-    const id = card.dataset.id;
-    const lang = card.dataset.lang;
-    const code = window._codeSnippets?.[id];
-    if (code) renderFileView(`snippet.${lang}`, code);
+    if (card) {
+        const id = card.dataset.id;
+        const lang = card.dataset.lang || 'code';
+        const code = window._codeSnippets?.[id];
+        if (code) renderFileView(`snippet.${lang}`, code);
+    }
 });
 
 // Copy message button handler (event delegation)

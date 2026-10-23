@@ -1,0 +1,24 @@
+agent:
+  name: "JARVIS"
+  version: "2.0.0"
+  max_iterations: 10
+  timeout_seconds: 120
+  enable_feedback_loop: true
+  max_self_correction_attempts: 3
+  enable_long_term_memory: true
+  enable_short_term_memory: true
+  context_window_size: 10
+
+tools:
+  safe_mode: true
+  require_confirmation_for_destructive_actions: true
+  command_timeout_seconds: 30
+  screenshot_dir: "data/raw/screenshots"
+  downloads_dir: "data/raw/downloads"
+
+paths:
+  data_dir: "data"
+  raw_dir: "data/raw"
+  processed_dir: "data/processed"
+  vector_db_dir: "data/vector_db"
+  logs_dir: "logs"

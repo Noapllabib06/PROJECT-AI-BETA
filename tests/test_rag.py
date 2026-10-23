@@ -1,12 +1,12 @@
 import sys
 import os
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
-from local_memory import LocalMemory
+from src.memory.long_term import LongTermMemory
 
 def test_rag():
     # 1. Inisialisasi Memori Lokal
     print("--- Menginisialisasi RAG System ---")
-    memory = LocalMemory()
+    memory = LongTermMemory()
     
     # 2. Simulasi Dokumen Pengetahuan (Knowledge Base)
     knowledge_base = [
@@ -21,6 +21,7 @@ def test_rag():
     print("\nMenambahkan dokumen ke memori...")
     count = memory.add_documents(knowledge_base)
     print(f"Berhasil mengindeks {count} dokumen.")
+    assert count == len(knowledge_base)
     
     # 3. Pengujian Pencarian
     queries = [
@@ -34,6 +35,7 @@ def test_rag():
     for q in queries:
         print(f"\nQuery: {q}")
         results = memory.search(q, k=2)
+        assert len(results) > 0
         for i, res in enumerate(results):
             print(f"Result {i+1}: {res}")
 

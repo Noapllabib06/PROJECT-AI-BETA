@@ -1,18 +1,31 @@
+# Configuration & Environment
+pydantic>=2.6.0
+pydantic-settings>=2.2.0
+pyyaml>=6.0.1
+python-dotenv>=1.0.1
+loguru>=0.7.2
+
 # Core Backend & RAG Memory
-fastapi>=0.100.0
-uvicorn>=0.22.0
-pydantic>=2.0.0
+fastapi>=0.110.0
+uvicorn>=0.28.0
 numpy>=1.24.0
 sentence-transformers>=2.2.0
 faiss-cpu>=1.7.4
 turbovec>=0.1.0
 rank-bm25>=0.2.2
 
+# LLM & Web Tools
+httpx>=0.27.0
+beautifulsoup4>=4.12.3
+duckduckgo-search>=5.0.0
+yt-dlp>=2024.3.10
+mss>=9.0.1
+pillow>=10.2.0
+
 # Optional Audio / Voice Processing (audio_tools.js)
 openai-whisper>=20231117
 edge-tts>=6.1.9
 
-# Optional Neural OCR Processing (scripts/neural_ocr.py)
-# Note: On Windows, install paddlepaddle compatible with your CUDA or CPU version first
-# paddlepaddle>=2.5.0
-# paddleocr>=2.7.0
+# Testing
+pytest>=8.0.0
+pytest-asyncio>=0.23.0

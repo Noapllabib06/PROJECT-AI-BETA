@@ -1,0 +1,16 @@
+llm:
+  provider: "ollama"
+  ollama_base_url: "http://localhost:11434"
+  default_model: "qwen2.5:7b"
+  vision_model: "llava:7b"
+  embedding_model: "sentence-transformers/all-MiniLM-L6-v2"
+  embedding_dim: 384
+  temperature: 0.7
+  num_ctx: 8192
+  top_p: 0.9
+
+cloud_fallback:
+  enabled: false
+  provider: "gemini" # or "openai"
+  model_name: "gemini-1.5-flash"
+  api_key_env: "GEMINI_API_KEY"
