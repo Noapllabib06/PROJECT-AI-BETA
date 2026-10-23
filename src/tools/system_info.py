@@ -37,12 +37,14 @@ def get_jarvis_capabilities(query: str = "") -> str:
         ],
         "💻 Kontrol Sistem, Aplikasi & Kode": [
             "open_app", "open_website", "control_volume", "create_file",
-            "read_file", "git_operation", "ingest_codebase"
+            "read_file", "git_operation", "ingest_codebase",
+            "read_github_repo", "read_github_file", "clone_and_ingest_github"
         ],
         "🔒 Komunikasi & Kredensial Terenkripsi": [
             "check_email", "save_credential"
         ],
-        "🧠 Memori & Basis Pengetahuan (RAG)": [
+        "🧠 Second Brain & Memori Semantik (Obsidian + ChromaDB)": [
+            "process_second_brain_pipeline", "ingest_with_markitdown", "search_second_brain",
             "save_memory", "search_memory"
         ],
         "👁️ Visi Komputer, Dokumen & Kepenulisan": [

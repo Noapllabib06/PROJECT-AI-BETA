@@ -77,7 +77,16 @@ TOOL_KEYWORD_RULES: Dict[str, List[str]] = {
     "read_file": ["baca file", "baca isi file", "baca kode", "lihat isi file"],
     "read_webpage": ["baca artikel", "baca webpage", "baca halaman web", "baca link ini"],
     "search_memory": ["ingatan", "makanan kesukaan", "fakta masa lalu", "apa yang kukatakan", "pernah kubilang", "ingat tidak"],
-    "save_memory": ["ingat kalau", "ingat bahwa", "ingat ya", "tolong ingat", "simpan fakta"]
+    "save_memory": ["ingat kalau", "ingat bahwa", "ingat ya", "tolong ingat", "simpan fakta"],
+    "process_second_brain_pipeline": [
+        "second brain", "simpan ke obsidian", "catat ke obsidian", "masukkan ke second brain",
+        "simpan ke vault", "catat ke vault", "rangkum ke obsidian", "arsip ke obsidian"
+    ],
+    "ingest_with_markitdown": ["ekstrak markitdown", "baca pdf", "baca docx", "ekstrak dokumen"],
+    "search_second_brain": ["cari di second brain", "cari di catatan", "cari di obsidian", "cari di vault"],
+    "read_github_repo": ["baca github", "baca repo", "analisis github", "pelajari repo", "cek github", "github.com/"],
+    "read_github_file": ["baca file github", "lihat kode github", "baca kode github"],
+    "clone_and_ingest_github": ["clone github", "kloning repo", "ingest github", "pelajari repo github"]
 }
 
 

@@ -58,5 +58,9 @@ memory_index.bin
 .jarvis-config.json
 venv/
 vllm-env/
+data/second_brain/
+data/raw/github_repos/
+data/processed/latest_evaluation_report.json
+data/raw/screenshots/
 vllm-env-311/
 vllm-env-official/

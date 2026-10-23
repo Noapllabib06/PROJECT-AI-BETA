@@ -341,9 +341,19 @@ async def search_wikipedia(query: str) -> str:
 
 
 async def read_webpage(url: str, max_chars: int = 3000) -> str:
-    """Fetches a webpage, cleans HTML tags, and extracts readability text."""
+    """Fetches a webpage, cleans HTML tags, and extracts readability text. Intercepts GitHub URLs."""
     if not url.startswith("http://") and not url.startswith("https://"):
         url = "https://" + url
+
+    # Auto-intercept GitHub URLs for deep native extraction
+    if "github.com/" in url.lower():
+        try:
+            from src.tools.github_tool import read_github_repo, read_github_file
+            if "/blob/" in url:
+                return await read_github_file(url)
+            return await read_github_repo(url)
+        except Exception as ex:
+            logger.debug(f"GitHub deep reader fallback to standard scraper: {ex}")
 
     logger.info(f"Reading webpage: {url}")
     try:

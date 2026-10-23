@@ -52,6 +52,19 @@ class LLMSettings(BaseModel):
     top_p: float = 0.85
 
 
+class SecondBrainSettings(BaseModel):
+    obsidian_base_url: str = "http://127.0.0.1:27124"
+    obsidian_api_key: Optional[str] = None
+    obsidian_vault_path: str = "data/second_brain/vault"
+    chroma_persist_dir: str = "data/second_brain/chromadb"
+    chroma_collection: str = "second_brain"
+
+
+class GitHubSettings(BaseModel):
+    token: Optional[str] = None
+    cache_dir: str = "data/raw/github_repos"
+
+
 class CloudFallbackSettings(BaseModel):
     enabled: bool = False
     provider: str = "gemini"
@@ -101,13 +114,21 @@ class AppSettings(BaseSettings):
     serper_api_key: Optional[str] = Field(default=None, validation_alias="SERPER_API_KEY")
     tavily_api_key: Optional[str] = Field(default=None, validation_alias="TAVILY_API_KEY")
 
-    # Sub-configs populated from YAML
+    # Second Brain & GitHub integrations
+    obsidian_base_url: str = Field(default="http://127.0.0.1:27124", validation_alias="OBSIDIAN_BASE_URL")
+    obsidian_api_key: Optional[str] = Field(default=None, validation_alias="OBSIDIAN_API_KEY")
+    obsidian_vault_path: str = Field(default="data/second_brain/vault", validation_alias="OBSIDIAN_VAULT_PATH")
+    github_token: Optional[str] = Field(default=None, validation_alias="GITHUB_TOKEN")
+
+    # Sub-configs populated from YAML / defaults
     agent: AgentSettings = Field(default_factory=AgentSettings)
     tools: ToolsSettings = Field(default_factory=ToolsSettings)
     paths: PathsSettings = Field(default_factory=PathsSettings)
     llm: LLMSettings = Field(default_factory=LLMSettings)
     cloud_fallback: CloudFallbackSettings = Field(default_factory=CloudFallbackSettings)
     logging: LoggingSettings = Field(default_factory=LoggingSettings)
+    second_brain: SecondBrainSettings = Field(default_factory=SecondBrainSettings)
+    github: GitHubSettings = Field(default_factory=GitHubSettings)
 
     @classmethod
     def load(cls) -> "AppSettings":
@@ -161,6 +182,9 @@ class AppSettings(BaseSettings):
             self.paths.logs_dir,
             self.tools.screenshot_dir,
             self.tools.downloads_dir,
+            self.second_brain.obsidian_vault_path,
+            self.second_brain.chroma_persist_dir,
+            self.github.cache_dir,
         ]:
             target = BASE_DIR / path_str
             target.mkdir(parents=True, exist_ok=True)
