@@ -98,6 +98,7 @@ def ingest_course_materials(folder_or_file_path: str = "", course_name: str = ""
     total_chunks_stored = 0
     processed_files_count = 0
     course_meetings_found = set()
+    batch_docs: List[Dict[str, Any]] = []
 
     for file_path in files_to_process:
         # Determine course name: explicit, or parent folder name
@@ -130,7 +131,7 @@ def ingest_course_materials(folder_or_file_path: str = "", course_name: str = ""
         if not extracted_text.strip():
             continue
 
-        # Chunk and index into LongTermMemory
+        # Chunk and prepare for batch indexing
         chunks = chunk_text(extracted_text, chunk_size=500, overlap=80)
         for i, chunk in enumerate(chunks, start=1):
             metadata = {
@@ -141,14 +142,16 @@ def ingest_course_materials(folder_or_file_path: str = "", course_name: str = ""
                 "chunk_index": i
             }
             doc_id = f"acad_{derived_course[:6]}_{meeting_tag}_{file_path.stem[:8]}_{i}"
-            memory_store.remember(
-                text=f"[{derived_course.replace('_', ' ')} - {meeting_tag} | {file_path.name}]\n{chunk}",
-                doc_id=doc_id,
-                metadata=metadata
-            )
-            total_chunks_stored += 1
+            batch_docs.append({
+                "id": doc_id,
+                "text": f"[{derived_course.replace('_', ' ')} - {meeting_tag} | {file_path.name}]\n{chunk}",
+                "metadata": metadata
+            })
 
         processed_files_count += 1
+
+    if batch_docs:
+        total_chunks_stored = memory_store.remember_batch(batch_docs)
 
     sorted_meetings = sorted(list(course_meetings_found))
     meetings_summary = ", ".join(sorted_meetings) if sorted_meetings else "Dokumen umum / Silabus"

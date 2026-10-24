@@ -70,7 +70,15 @@ class ToolAgent(BaseAgent):
         start_time = time.perf_counter()
         try:
             logger.info(f"Executing tool '{tool_name}' with query: '{query[:80]}'")
-            timeout_sec = float(settings.tools.command_timeout_seconds)
+            # Allow longer timeout for batch document ingestion tools
+            LONG_RUNNING_TOOLS = {
+                "ingest_course_materials", "clone_and_ingest_github",
+                "ingest_codebase", "research_and_summarize", "process_second_brain_pipeline"
+            }
+            if tool_name in LONG_RUNNING_TOOLS:
+                timeout_sec = max(float(settings.tools.command_timeout_seconds) * 6, 180.0)
+            else:
+                timeout_sec = float(settings.tools.command_timeout_seconds)
 
             # Determine whether handler accepts **kwargs or (query, **kwargs)
             sig = inspect.signature(handler)

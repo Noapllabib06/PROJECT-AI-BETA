@@ -241,7 +241,8 @@ class LongTermMemory:
         doc_id: str,
         text: str,
         vector: Optional[List[float]] = None,
-        metadata: Optional[Dict[str, Any]] = None
+        metadata: Optional[Dict[str, Any]] = None,
+        auto_save: bool = True
     ) -> int:
         if not text or not text.strip():
             return -1
@@ -265,23 +266,27 @@ class LongTermMemory:
         }
         self.current_id += 1
 
-        self._rebuild_bm25()
-        self.save_to_disk()
+        if auto_save:
+            self._rebuild_bm25()
+            self.save_to_disk()
         return internal_id
 
     def add_documents(self, documents: Sequence[Union[str, Dict[str, Any]]]) -> int:
         count = 0
         for doc in documents:
             if isinstance(doc, str):
-                self.add_memory(doc_id=f"doc_{self.current_id}", text=doc)
+                self.add_memory(doc_id=f"doc_{self.current_id}", text=doc, auto_save=False)
                 count += 1
             elif isinstance(doc, dict):
                 text = doc.get("text") or doc.get("content", "")
                 doc_id = doc.get("id", f"doc_{self.current_id}")
                 meta = doc.get("metadata", {})
                 if text:
-                    self.add_memory(doc_id=doc_id, text=text, metadata=meta)
+                    self.add_memory(doc_id=doc_id, text=text, metadata=meta, auto_save=False)
                     count += 1
+        if count > 0:
+            self._rebuild_bm25()
+            self.save_to_disk()
         return count
 
     def search_memory(

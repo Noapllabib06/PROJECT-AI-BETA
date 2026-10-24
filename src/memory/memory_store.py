@@ -58,6 +58,10 @@ class MemoryStore:
         id_str = doc_id or f"mem_{self.long_term.current_id}"
         return self.long_term.add_memory(doc_id=id_str, text=text, metadata=metadata)
 
+    def remember_batch(self, documents: List[Dict[str, Any]]) -> int:
+        """Stores a batch of documents in long-term memory with a single BM25 rebuild and disk save."""
+        return self.long_term.add_documents(documents)
+
     def recall(
         self,
         query: str,
