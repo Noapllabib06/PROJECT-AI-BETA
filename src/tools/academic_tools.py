@@ -65,13 +65,54 @@ def ingest_course_materials(folder_or_file_path: str = "", course_name: str = ""
         folder_or_file_path: Path to course folder (e.g., 'data/kuliah/Sistem_Operasi') or specific file.
         course_name: Optional explicit name of the course. Auto-detected from directory if omitted.
     """
-    target_path = Path(folder_or_file_path.strip()) if folder_or_file_path.strip() else DEFAULT_COURSES_DIR
+    raw_input = folder_or_file_path.strip()
+    target_path = Path(raw_input) if raw_input else DEFAULT_COURSES_DIR
 
+    # Intelligent multi-layer path resolution:
     if not target_path.is_absolute():
-        target_path = BASE_DIR / target_path
+        resolved_at_root = BASE_DIR / target_path
+        if resolved_at_root.exists():
+            target_path = resolved_at_root
+        else:
+            # Check under data/kuliah/ with exact name or space-to-underscore
+            direct_course_path = DEFAULT_COURSES_DIR / raw_input
+            underscore_course_path = DEFAULT_COURSES_DIR / raw_input.replace(" ", "_")
+
+            if direct_course_path.exists():
+                target_path = direct_course_path
+            elif underscore_course_path.exists():
+                target_path = underscore_course_path
+            else:
+                # Fuzzy match subdirectories under data/kuliah/
+                matched_dir = None
+                clean_input = re.sub(r"[^a-zA-Z0-9]", "", raw_input.lower())
+                if clean_input and DEFAULT_COURSES_DIR.exists():
+                    for sub in DEFAULT_COURSES_DIR.iterdir():
+                        if sub.is_dir():
+                            clean_sub = re.sub(r"[^a-zA-Z0-9]", "", sub.name.lower())
+                            if clean_input in clean_sub or clean_sub in clean_input:
+                                matched_dir = sub
+                                break
+                if matched_dir:
+                    target_path = matched_dir
+                elif not raw_input:
+                    target_path = DEFAULT_COURSES_DIR
+                else:
+                    target_path = resolved_at_root
 
     if not target_path.exists():
-        return f"❌ Direktori atau berkas materi kuliah tidak ditemukan: `{target_path}`. Pastikan berkas sudah diletakkan di `data/kuliah/`."
+        # Provide helpful guidance with list of existing courses
+        existing = [d.name for d in DEFAULT_COURSES_DIR.iterdir() if d.is_dir()] if DEFAULT_COURSES_DIR.exists() else []
+        avail_str = ", ".join(f"`{e}`" for e in existing) if existing else "Belum ada folder di data/kuliah/"
+        return (
+            f"❌ Direktori atau berkas materi kuliah tidak ditemukan di: `{target_path}`.\n"
+            f"Pastikan berkas berada di dalam folder `data/kuliah/`.\n"
+            f"Folder mata kuliah yang terdeteksi saat ini: {avail_str}."
+        )
+
+    # If course_name was empty, derive from target_path folder name if inside data/kuliah
+    if not course_name and target_path != DEFAULT_COURSES_DIR:
+        course_name = target_path.name.replace("_", " ")
 
     # Identify files to process
     files_to_process = []
