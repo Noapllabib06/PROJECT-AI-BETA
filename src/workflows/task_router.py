@@ -105,6 +105,12 @@ TOOL_KEYWORD_RULES: Dict[str, List[str]] = {
     "generate_study_quiz": [
         "kuis latihan", "latihan ujian", "kisi-kisi uts", "kisi-kisi uas", "buatkan kuis",
         "soal latihan", "latihan soal", "simulasi ujian"
+    ],
+    "summarize_course_materials": [
+        "rangkum materi kuliah", "rangkum semua materi", "rangkum kuliah", "rangkuman kuliah",
+        "ringkasan kuliah", "rangkum dari p1", "rangkum seluruh materi", "rangkum matkul",
+        "ringkas matkul", "rangkum semuanya", "rangkum matakuliah", "rangkum semua",
+        "ringkas semua", "peta konsep kuliah", "benang merah kuliah", "rangkum materi"
     ]
 }
 

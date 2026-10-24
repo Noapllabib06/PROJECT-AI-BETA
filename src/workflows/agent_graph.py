@@ -255,18 +255,40 @@ Hasil Tindakan / Eksekusi Tool:
             for res in state.execution_results:
                 status = "BERHASIL" if res.success else "GAGAL"
                 raw_out_str = str(res.output or res.error)
-                if len(raw_out_str) > 1200:
-                    raw_out_str = raw_out_str[:1200] + "\n... [Output diringkas untuk efisiensi konteks]"
+                max_chars = 8000 if res.tool in (
+                    "summarize_course_materials", "search_course_materials",
+                    "generate_study_quiz", "research_and_summarize", "read_file", "read_github_repo"
+                ) else 3000
+                if len(raw_out_str) > max_chars:
+                    raw_out_str = raw_out_str[:max_chars] + "\n... [Output diringkas untuk efisiensi konteks]"
                 synthesis_prompt += f"\n- Tool '{res.tool}' [{status}]:\n{raw_out_str}\n"
 
-            synthesis_prompt += """
+            # Dynamic Intent-Aware Synthesis Instructions
+            is_summary = bool(re.search(r"\b(?:rangkum|ringkas|summary|summarize|kesimpulan|semuanya|seluruh|peta konsep|benang merah|alur|kisi-kisi)\b", user_query, re.IGNORECASE))
+            is_academic = any("course" in tc.tool or "quiz" in tc.tool for tc in state.tool_calls)
+            has_failure = any(not res.success for res in state.execution_results)
+
+            if is_summary or is_academic:
+                synthesis_prompt += """
+Instruksi Sintesis Khusus Rangkuman / Pembelajaran:
+1. Susunlah penjelasan secara MENGALIR, KOHESIF, dan TERPADU sebagai SATU KESATUAN BESAR (narrative big picture).
+2. DILARANG KERAS memecah materi hanya menjadi poin-poin terpisah per pertemuan secara mekanis.
+3. Rangkum bagaimana konsep berkembang dari awal (fondasi) hingga akhir (arsitektur/implementasi lanjutan): kelompokkan berdasarkan PILAR UTAMA materi, bukan sekadar urutan pertemuan.
+4. Tunjukkan benang merah dan keterkaitan antar konsep, serta intisari penting untuk pemahaman menyeluruh atau ujian.
+5. JANGAN membuat seksi 'Tautan Sumber & Referensi' jika tidak ada link URL nyata dari web (DILARANG menulis 'Tidak ada tautan sumber').
+6. JANGAN gunakan template kaku jika tidak relevan."""
+            elif has_failure:
+                synthesis_prompt += """
+Instruksi Sintesis (Kendala / Peringatan Sistem):
+1. Sampaikan secara lugas, ramah, dan solutif apa kendala yang terjadi.
+2. Berikan petunjuk perbaikan yang jelas dan dapat langsung dieksekusi oleh pengguna.
+3. DILARANG menggunakan template kaku seperti 'Konteks & Dampak' atau seksi 'Tautan Sumber' yang kosong."""
+            else:
+                synthesis_prompt += """
 Instruksi Sintesis:
-Susunlah jawaban akhir yang sangat terstruktur, jelas, komprehensif, dan elegan dalam bahasa Indonesia.
-Gunakan struktur:
-1. Ringkasan Inti (langsung menjawab tanpa basa-basi teknis).
-2. Poin-Poin Kunci & Analisis (gunakan bullet points tebal: - **Poin**: Penjelasan).
-3. Konteks/Dampak penting bila ada.
-4. Tautan Sumber & Referensi HANYA JIKA tersedia URL nyata dari hasil tool web. DILARANG KERAS mencantumkan tautan fiktif seperti 'example.com' atau sejenisnya. Jika tidak ada data pencarian web, JANGAN buat seksi referensi!
+1. Jawab langsung inti pertanyaan atau sampaikan laporan hasil tindakan secara jelas, natural, dan profesional.
+2. Gunakan pemformatan Markdown yang rapi (bold, bullet points jika diperlukan).
+3. HANYA sertakan 'Tautan Sumber & Referensi' jika ada link URL web NYATA dari hasil pencarian web. Jika tidak ada link web, JANGAN buat seksi referensi sama sekali!
 DILARANG menggunakan format JSON atau menyebutkan label internal sistem."""
 
             try:

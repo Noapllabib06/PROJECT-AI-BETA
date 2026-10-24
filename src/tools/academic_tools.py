@@ -21,12 +21,13 @@ DEFAULT_COURSES_DIR = BASE_DIR / "data" / "kuliah"
 
 
 def extract_meeting_number(filename_or_text: str) -> Optional[str]:
-    """Detects meeting number (e.g. P01, P2, Pertemuan 3, Minggu 4) from filename or text."""
-    pattern = re.compile(r"(?:pertemuan|meeting|minggu|sesi|p)[_\-\s]?0?([1-9]|1[0-6])(?=[^0-9a-zA-Z]|$)", re.IGNORECASE)
+    """Detects meeting number (e.g. P01, P2, Pertemuan 3, P07A, P07B) from filename or text."""
+    pattern = re.compile(r"(?:pertemuan|meeting|minggu|sesi|p)[_\-\s]?0?([1-9]|1[0-6])([a-zA-Z])?(?=[^0-9a-zA-Z]|$)", re.IGNORECASE)
     match = pattern.search(filename_or_text)
     if match:
         num = int(match.group(1))
-        return f"P{num:02d}"
+        suffix = match.group(2).upper() if match.group(2) else ""
+        return f"P{num:02d}{suffix}"
     return None
 
 
@@ -292,6 +293,178 @@ Instruksi Kuis:
 Model dipersilakan merumuskan 3-5 soal kuis latihan (Pilihan Ganda & Analisis Kasus) berdasarkan konteks materi di atas, lengkap dengan kunci jawaban dan pembahasan komprehensif."""
 
 
+def summarize_course_materials(
+    folder_or_course_name: str = "",
+    meeting_range: str = "",
+    focus_topic: str = "",
+    course_name: str = ""
+) -> str:
+    """Produces a comprehensive, holistic summary across all course meetings (P01 to Px),
+    synthesizing overarching themes, curriculum progression, and conceptual connections.
+
+    Args:
+        folder_or_course_name: Course name or folder path (e.g. 'Cloud Computing' or 'data/kuliah/Cloud_Computing').
+        meeting_range: Optional range of meetings (e.g. 'P01-P07', 'semua').
+        focus_topic: Optional specific topic to trace across all meetings.
+        course_name: Optional explicit name if folder is passed.
+    """
+    raw_input = (folder_or_course_name or course_name).strip()
+    target_path = Path(raw_input) if raw_input else DEFAULT_COURSES_DIR
+
+    # Multi-layer path resolution
+    if not target_path.is_absolute():
+        resolved_at_root = BASE_DIR / target_path
+        if resolved_at_root.exists() and resolved_at_root != BASE_DIR:
+            target_path = resolved_at_root
+        else:
+            direct_course_path = DEFAULT_COURSES_DIR / raw_input
+            underscore_course_path = DEFAULT_COURSES_DIR / raw_input.replace(" ", "_")
+
+            if direct_course_path.exists() and raw_input:
+                target_path = direct_course_path
+            elif underscore_course_path.exists() and raw_input:
+                target_path = underscore_course_path
+            else:
+                matched_dir = None
+                clean_input = re.sub(r"[^a-zA-Z0-9]", "", raw_input.lower())
+                if clean_input and DEFAULT_COURSES_DIR.exists():
+                    for sub in DEFAULT_COURSES_DIR.iterdir():
+                        if sub.is_dir():
+                            clean_sub = re.sub(r"[^a-zA-Z0-9]", "", sub.name.lower())
+                            if clean_input in clean_sub or clean_sub in clean_input:
+                                matched_dir = sub
+                                break
+                if matched_dir:
+                    target_path = matched_dir
+                elif not raw_input:
+                    available = [d for d in DEFAULT_COURSES_DIR.iterdir() if d.is_dir() and not d.name.startswith(".")] if DEFAULT_COURSES_DIR.exists() else []
+                    if len(available) == 1:
+                        target_path = available[0]
+                    else:
+                        target_path = DEFAULT_COURSES_DIR
+                else:
+                    target_path = resolved_at_root
+
+    if not target_path.exists() or target_path == DEFAULT_COURSES_DIR:
+        existing = [d.name for d in DEFAULT_COURSES_DIR.iterdir() if d.is_dir()] if DEFAULT_COURSES_DIR.exists() else []
+        avail_str = ", ".join(f"`{e}`" for e in existing) if existing else "Belum ada folder di data/kuliah/"
+        return (
+            f"❌ Direktori mata kuliah `{course_name}` tidak ditemukan.\n"
+            f"Folder mata kuliah yang terdeteksi di `data/kuliah/`: {avail_str}."
+        )
+
+    resolved_course_name = target_path.name.replace("_", " ")
+
+    # Check for cached manifest
+    manifest_file = target_path / "_course_manifest.json"
+    manifest_data = {}
+    if manifest_file.exists():
+        try:
+            import json
+            manifest_data = json.loads(manifest_file.read_text(encoding="utf-8"))
+        except Exception:
+            manifest_data = {}
+
+    supported_extensions = {".pdf", ".pptx", ".docx", ".txt", ".md"}
+    raw_files = [f for f in target_path.iterdir() if f.is_file() and f.suffix.lower() in supported_extensions and not f.name.startswith(("_", "."))]
+
+    def sort_key(f: Path):
+        m = extract_meeting_number(f.stem)
+        if not m:
+            return (999, "", f.name)
+        digits = re.findall(r"\d+", m)
+        num = int(digits[0]) if digits else 999
+        suffix = m[3:] if len(m) > 3 else ""
+        return (num, suffix, f.name)
+
+    files = sorted(raw_files, key=sort_key)
+    if not files:
+        return f"Mata kuliah `{resolved_course_name}` belum memiliki berkas materi (PDF/PPTX) di `{target_path}`."
+
+    cached_meetings = manifest_data.get("meetings", {})
+    updated_meetings = {}
+
+    md = None
+    try:
+        from markitdown import MarkItDown
+        md = MarkItDown()
+    except Exception:
+        pass
+
+    for file_path in files:
+        m_tag = extract_meeting_number(file_path.stem) or "Umum"
+        if m_tag in cached_meetings and cached_meetings[m_tag].get("topics"):
+            updated_meetings[m_tag] = cached_meetings[m_tag]
+            continue
+
+        chapter_title = ""
+        key_topics = []
+        try:
+            extracted_text = ""
+            if md:
+                res = md.convert(str(file_path))
+                extracted_text = res.text_content
+            if not extracted_text:
+                extracted_text = file_path.read_text(encoding="utf-8", errors="ignore")
+
+            lines = [l.strip() for l in extracted_text.splitlines() if l.strip() and not l.startswith("![") and not l.startswith("<!--")]
+            for l in lines[:10]:
+                if any(k in l.lower() for k in ["chapter", "bab", "topik", "pengantar", "materi", "introduction", "arsitektur", "architecture"]):
+                    chapter_title = l
+                    break
+            if not chapter_title and lines:
+                chapter_title = lines[0]
+
+            for l in lines[1:50]:
+                if len(l) > 5 and len(l) < 80 and not l.isdigit() and not l.startswith("http"):
+                    if l not in key_topics and len(key_topics) < 5:
+                        key_topics.append(l)
+        except Exception:
+            chapter_title = file_path.stem.replace("_", " ")
+
+        updated_meetings[m_tag] = {
+            "file": file_path.name,
+            "title": chapter_title or file_path.stem.replace("_", " "),
+            "topics": key_topics
+        }
+
+    # Save manifest cache
+    try:
+        import json
+        manifest_data = {
+            "course": resolved_course_name,
+            "total_meetings": len(updated_meetings),
+            "meetings": updated_meetings
+        }
+        manifest_file.write_text(json.dumps(manifest_data, indent=2, ensure_ascii=False), encoding="utf-8")
+    except Exception:
+        pass
+
+    meetings_list = []
+    for m_tag, info in updated_meetings.items():
+        topics_str = ", ".join(info["topics"][:3]) if info.get("topics") else "Konsep fundamental materi"
+        meetings_list.append(f"- **{m_tag}** (`{info['file']}`): **{info['title']}**\n  *Fokus Topik*: {topics_str}")
+
+    meetings_block = "\n".join(meetings_list)
+    first_m = list(updated_meetings.keys())[0]
+    last_m = list(updated_meetings.keys())[-1]
+
+    return f"""📚 **Peta Kurikulum & Materi Lengkap Perkuliahan:**
+- **Mata Kuliah**: `{resolved_course_name}`
+- **Total Materi Pertemuan**: {len(updated_meetings)} Pertemuan
+- **Cakupan**: {first_m} s.d. {last_m}
+
+### 📌 Kronologi & Garis Waktu Pertemuan:
+{meetings_block}
+
+---
+💡 **Instruksi Rangkuman Terpadu:**
+Sintesiskan materi di atas menjadi **SATU RANGKUMAN UTUH YANG MENGALIR DAN BERKESINAMBUNGAN** (Holistic Big-Picture Narrative).
+- Kelompokkan ke dalam 4 Pilar Konseptual Utama (Fondasi Filosofis & Arsitektur, Komputasi & Komunikasi Antar-Node, Sinkronisasi & Penamaan, serta Keandalan Skala Besar & Toleransi Kegagalan).
+- Jelaskan hubungan sebab-akibat dan benang merah: bagaimana materi pertemuan awal menjadi pondasi bagi materi pertemuan selanjutnya.
+- Berikan intisari penting yang harus dikuasai mahasiswa untuk ujian dan pemahaman praktis di dunia industri."""
+
+
 # ==========================================
 # Tool Definitions for Orchestrator Registration
 # ==========================================
@@ -352,6 +525,24 @@ TOOL_DEFINITIONS: List[Dict[str, Any]] = [
                 "meeting": {"type": "string", "description": "Pertemuan ke-X"}
             },
             "required": ["query"]
+        }
+    },
+    {
+        "name": "summarize_course_materials",
+        "description": "Merangkum seluruh materi kuliah dari pertemuan awal hingga akhir (P1 s.d. Px) menjadi satu kesatuan narasi holistik yang berkesinambungan tanpa terpecah-pecah.",
+        "handler": lambda query="", **kwargs: summarize_course_materials(
+            course_name=kwargs.get("course_name", query),
+            meeting_range=kwargs.get("meeting_range", ""),
+            focus_topic=kwargs.get("focus_topic", "")
+        ),
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "course_name": {"type": "string", "description": "Nama mata kuliah yang ingin dirangkum (misal: 'Cloud Computing')"},
+                "meeting_range": {"type": "string", "description": "Rentang pertemuan opsional (misal: 'P01-P07' atau 'semua')"},
+                "focus_topic": {"type": "string", "description": "Topik bahasan khusus yang ingin disorot across semua pertemuan"}
+            },
+            "required": ["course_name"]
         }
     }
 ]

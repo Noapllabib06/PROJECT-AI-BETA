@@ -43,3 +43,23 @@ Berikut informasi dari Wikipedia mengenai Python.
     
     assert "https://id.wikipedia.org/wiki/Python" in cleaned
     assert "Tautan Sumber & Referensi" in cleaned
+
+
+def test_clean_answer_text_removes_negative_source_disclaimers():
+    supervisor = SupervisorAgent()
+
+    sample_text = """### Ringkasan Inti
+Direktori materi kuliah Cloud Computing berhasil diproses.
+
+Tautan Sumber & Referensi
+
+Tidak ada tautan sumber yang tersedia dari hasil eksekusi tool pencarian web dalam hal ini. Jika Anda membutuhkan informasi lebih lanjut tentang penginggrasan materi kuliah, Anda dapat merujuk ke dokumentasi sistem.
+"""
+
+    cleaned, corrections = supervisor.clean_answer_text(sample_text)
+
+    assert "Tautan Sumber & Referensi" not in cleaned
+    assert "Tidak ada tautan sumber" not in cleaned
+    assert "Direktori materi kuliah Cloud Computing berhasil diproses." in cleaned
+    assert any("negative boilerplate" in c for c in corrections)
+

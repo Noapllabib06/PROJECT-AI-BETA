@@ -8,7 +8,8 @@ from src.tools.academic_tools import (
     ingest_course_materials,
     search_course_materials,
     list_enrolled_courses,
-    generate_study_quiz
+    generate_study_quiz,
+    summarize_course_materials
 )
 from src.tools import get_all_tools
 from src.workflows.task_router import TaskRouter
@@ -20,6 +21,8 @@ def test_extract_meeting_number():
     assert extract_meeting_number("Pertemuan_3_Memory_Management.docx") == "P03"
     assert extract_meeting_number("minggu-5-normalisasi.pptx") == "P05"
     assert extract_meeting_number("sesi 12 distributed systems.pdf") == "P12"
+    assert extract_meeting_number("P07A.pptx") == "P07A"
+    assert extract_meeting_number("P07B.pptx") == "P07B"
     assert extract_meeting_number("silabus_lengkap.pdf") is None
 
 
@@ -60,6 +63,21 @@ def test_academic_ingest_and_filtered_search(tmp_path):
     assert "unit terkecil pemanfaatan CPU" in search_res
 
 
+def test_summarize_course_materials(tmp_path):
+    cloud_dir = tmp_path / "data" / "kuliah" / "Cloud_Computing"
+    cloud_dir.mkdir(parents=True, exist_ok=True)
+
+    (cloud_dir / "P01_Intro.txt").write_text("Chapter 01: Introduction to Distributed Systems and Cloud Computing", encoding="utf-8")
+    (cloud_dir / "P02_Arch.txt").write_text("Chapter 02: Architectures and Layering Models", encoding="utf-8")
+
+    summary = summarize_course_materials(folder_or_course_name=str(cloud_dir), course_name="Cloud Computing")
+    assert "Peta Kurikulum & Materi Lengkap Perkuliahan" in summary
+    assert "Cloud Computing" in summary
+    assert "P01" in summary
+    assert "P02" in summary
+    assert "Chapter 01" in summary
+
+
 def test_task_router_routes_academic_tools():
     router = TaskRouter()
     all_tools = get_all_tools()
@@ -67,6 +85,7 @@ def test_task_router_routes_academic_tools():
     assert "ingest_course_materials" in tool_names
     assert "search_course_materials" in tool_names
     assert "generate_study_quiz" in tool_names
+    assert "summarize_course_materials" in tool_names
 
     # Test search routing
     routed, scores = router.route_tools("bagaimana materi pertemuan 2 Sistem Operasi tentang thread?", all_tools)
@@ -77,3 +96,9 @@ def test_task_router_routes_academic_tools():
     routed_quiz, _ = router.route_tools("buatkan kuis latihan ujian untuk materi kuliah Sistem Operasi", all_tools)
     quiz_names = [t["name"] for t in routed_quiz]
     assert "generate_study_quiz" in quiz_names
+
+    # Test summarize routing
+    routed_sum, _ = router.route_tools("tolong rangkum seluruh materi kuliah Cloud Computing dari p1 sampai akhir", all_tools)
+    sum_names = [t["name"] for t in routed_sum]
+    assert "summarize_course_materials" in sum_names
+

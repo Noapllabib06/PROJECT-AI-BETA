@@ -140,6 +140,15 @@ class SupervisorAgent(BaseAgent):
             cleaned = empty_source_section_pattern.sub("", cleaned).strip()
             applied_corrections.append("Removed empty source & reference section")
 
+        # 4.2 Remove boilerplate negative source sections (e.g. "Tidak ada tautan sumber...")
+        negative_source_pattern = re.compile(
+            r"\n*(?:###?\s*)?(?:🔗\s*)?(?:Tautan\s+)?Sumber(?:\s*&\s*Referensi)?\s*:?\s*\n+(?:[-*]?\s*)?(?:Tidak ada|Belum ada|N/A|None|Tidak tersedia)[^\n]*(?:\n(?:(?![#A-Z0-9\n]).*|\s*))*",
+            re.IGNORECASE
+        )
+        if negative_source_pattern.search(cleaned):
+            cleaned = negative_source_pattern.sub("", cleaned).strip()
+            applied_corrections.append("Removed negative boilerplate source section")
+
         return cleaned.strip(), applied_corrections
 
     def synthesize_tool_results(
