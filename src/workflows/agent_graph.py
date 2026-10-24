@@ -4,6 +4,7 @@ Manages the complete lifecycle:
 User Query -> Route -> Memory Injection -> Planning -> Tool Execution -> Self-Correction -> Synthesis -> Supervision
 """
 
+import re
 import asyncio
 from typing import List, Dict, Any, Optional, Callable
 from pydantic import BaseModel, Field
@@ -141,7 +142,52 @@ class AgentGraph:
             )
 
             if validation.success:
-                state.tool_calls = validation.data
+                raw_tool_calls = validation.data
+
+                # Anti-Hallucination & Rogue Multi-Tool Burst Guardrail
+                # Check if model hallucinated multiple tools when user only asked an informational question
+                is_question = bool(re.search(
+                    r"\b(?:apa|siapa|bagaimana|gimana|kenapa|mengapa|apakah|bisa apa|kapabilitas|kemampuan|fitur|jelaskan|sebutkan|ceritakan|rangkum)\b",
+                    user_query,
+                    re.IGNORECASE
+                ))
+                is_explicit_compound = plan.is_multi_step or bool(re.search(
+                    r"\b(?:lalu|kemudian|setelah itu|sekaligus|dan juga)\b",
+                    user_query,
+                    re.IGNORECASE
+                ))
+
+                if len(raw_tool_calls) > 1 and not is_explicit_compound and is_question:
+                    logger.warning(
+                        f"Detected rogue multi-tool burst ({len(raw_tool_calls)} tools) for informational query '{user_query}'. "
+                        f"Tools: {[tc.tool for tc in raw_tool_calls]}. Intercepting rogue execution!"
+                    )
+
+                    # If asking about capabilities / features
+                    if re.search(r"\b(?:bisa apa|kemampuan(?:nya)?|kapabilitas(?:nya)?|fitur(?:nya)?|tool|batasan(?:nya)?|limitasi(?:nya)?)\b", user_query, re.IGNORECASE):
+                        recent_msgs = self.memory.get_chat_history(limit=4)
+                        has_recent_repo_or_doc = any(
+                            "github" in str(m.get("content", "")).lower() or "readme" in str(m.get("content", "")).lower()
+                            for m in recent_msgs
+                        )
+
+                        if has_recent_repo_or_doc and re.search(r"\b(?:projek|proyek|repo|repositori|dokumen|file|kode)\b", user_query, re.IGNORECASE):
+                            # The user is asking about the capabilities of the project/repo just read!
+                            # Answer via chat so LLM summarizes the read document without executing side-effects.
+                            state.tool_calls = [ToolCall(tool="chat", query=user_query)]
+                        else:
+                            # User is asking about JARVIS capabilities
+                            state.tool_calls = [ToolCall(tool="get_jarvis_capabilities", query="")]
+                    else:
+                        # General query: keep only primary informational tool, or fallback to chat
+                        primary_call = raw_tool_calls[0]
+                        if primary_call.tool in ("search_web", "search_wikipedia", "search_memory"):
+                            state.tool_calls = [primary_call]
+                        else:
+                            state.tool_calls = [ToolCall(tool="chat", query=user_query)]
+                else:
+                    state.tool_calls = raw_tool_calls
+
                 self.supervisor.emit_trace("tool_decision", f"Selected tools: {[tc.tool for tc in state.tool_calls]}")
                 break
             else:
@@ -208,7 +254,10 @@ Hasil Tindakan / Eksekusi Tool:
 """
             for res in state.execution_results:
                 status = "BERHASIL" if res.success else "GAGAL"
-                synthesis_prompt += f"\n- Tool '{res.tool}' [{status}]:\n{res.output or res.error}\n"
+                raw_out_str = str(res.output or res.error)
+                if len(raw_out_str) > 1200:
+                    raw_out_str = raw_out_str[:1200] + "\n... [Output diringkas untuk efisiensi konteks]"
+                synthesis_prompt += f"\n- Tool '{res.tool}' [{status}]:\n{raw_out_str}\n"
 
             synthesis_prompt += """
 Instruksi Sintesis:
@@ -228,7 +277,13 @@ DILARANG menggunakan format JSON atau menyebutkan label internal sistem."""
                 )
             except Exception as e:
                 logger.error(f"Synthesis failed: {e}")
-                state.synthesized_answer = "\n".join(str(r.output or r.error) for r in state.execution_results)
+                clean_lines = []
+                for r in state.execution_results:
+                    if r.success and r.output:
+                        clean_lines.append(str(r.output).strip())
+                    elif r.error:
+                        clean_lines.append(f"⚠️ Terjadi kendala saat mengeksekusi {r.tool}: {r.error}")
+                state.synthesized_answer = "\n\n".join(clean_lines) if clean_lines else "Maaf, belum ada data yang dapat dirangkum."
 
         # ----------------------------------------------------
         # 7. Supervision & Answer Sanitization

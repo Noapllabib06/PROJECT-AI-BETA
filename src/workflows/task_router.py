@@ -32,11 +32,12 @@ TIME_SENSITIVE_KEYWORDS = [
 ]
 
 SELF_STATE_PATTERNS = [
-    re.compile(r"\b(?:kamu|anda|jarvis|lu|kau)\b.*\b(?:sedang|lagi|lakukan|ngapain|status|kabar|bisa apa|kemampuan)\b", re.IGNORECASE),
+    re.compile(r"\b(?:kamu|anda|jarvis|lu|kau)\b.*\b(?:sedang|lagi|lakukan|ngapain|status|kabar|bisa apa|kemampuan|kapabilitas)\b", re.IGNORECASE),
     re.compile(r"\b(?:sedang|lagi)\s+(?:apa|ngapain|lakukan)\b", re.IGNORECASE),
     re.compile(r"\bstatus\s+(?:kamu|anda|jarvis|sistem)\b", re.IGNORECASE),
     re.compile(r"\b(?:siapa|tentang|profil)\s+(?:kamu|anda|jarvis)\b", re.IGNORECASE),
-    re.compile(r"\b(?:apa\s+saja\s+yang\s+kamu\s+bisa|bisa\s+apa\s+saja|apa\s+kemampuanmu|kemampuan\s+kamu|daftar\s+tool)\b", re.IGNORECASE)
+    re.compile(r"\b(?:apa\s+saja\s+yang\s+kamu\s+bisa|bisa\s+apa\s+saja|apa\s+kemampuanmu|kemampuan\s+kamu|daftar\s+tool|kapabilitas)\b", re.IGNORECASE),
+    re.compile(r"\b(?:apa\s+(?:saja\s+)?(?:kapabilitas|kemampuan|fitur)(?:nya)?)\b", re.IGNORECASE)
 ]
 
 # Explicit Tool Keyword Mappings (High Precision)
@@ -47,7 +48,9 @@ TOOL_KEYWORD_RULES: Dict[str, List[str]] = {
         "siapa kamu", "tentang dirimu", "tentang jarvis", "jelaskan tentang dirimu",
         "daftar tool", "tool apa saja", "kegunaan tool", "tool yang kamu punya",
         "daftar kemampuan", "limitasi kamu", "apa batasanmu", "apa kelemahanmu",
-        "informasi sistem", "profil jarvis", "arsitektur jarvis", "what can you do", "list tools"
+        "informasi sistem", "profil jarvis", "arsitektur jarvis", "what can you do", "list tools",
+        "apa saja kapabilitasnya", "apa kapabilitasnya", "kapabilitasnya", "kapabilitas kamu",
+        "kapabilitas sistem", "kapabilitas projek", "kapabilitas proyek", "apa saja fiturnya", "apa fiturnya"
     ],
     "save_credential": ["simpan password", "simpan kredensial", "catat password", "password akun", "simpan kata sandi"],
     "check_email": ["cek email", "baca email", "email baru", "cek inbox", "cek gmail", "email dari", "isi email"],
@@ -187,7 +190,7 @@ class TaskRouter:
 
         # 5. Fallback for unclassified queries
         if not selected_tool_names:
-            if any(p.search(lower) for p in SELF_STATE_PATTERNS) or re.search(r"\b(?:bisa apa|fitur|kemampuan|kemampuanmu|limitasi|batasan)\b", lower):
+            if any(p.search(lower) for p in SELF_STATE_PATTERNS) or re.search(r"\b(?:bisa apa|fitur|kemampuan|kemampuanmu|kapabilitas|kapabilitasnya|limitasi|batasan)\b", lower):
                 selected_tool_names.add("get_jarvis_capabilities")
                 scores["get_jarvis_capabilities"] = 0.85
             else:
