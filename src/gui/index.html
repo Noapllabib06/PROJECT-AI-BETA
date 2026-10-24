@@ -172,6 +172,22 @@
             <nav id="conversationList" class="hidden mt-2 space-y-1">
                 <div id="conversationEmptyState" class="px-4 py-2 text-sm text-secondary">Belum ada percakapan.</div>
             </nav>
+
+            <!-- ============ Academic Hub Section ============ -->
+            <div id="academicHubContainer" class="px-2 pt-3 pb-1 mt-2 border-t border-border-subtle/70">
+                <div class="px-2 pb-2 flex items-center justify-between">
+                    <div class="flex items-center gap-1.5 text-xs font-bold text-action-orange-vibrant uppercase tracking-wider">
+                        <span class="material-symbols-outlined text-[16px]">school</span>
+                        <span>Academic Hub</span>
+                    </div>
+                    <span id="academicCountBadge" class="text-[10px] font-mono px-2 py-0.5 rounded-full bg-action-orange-vibrant/10 text-action-orange-vibrant font-semibold">
+                        0 Matkul
+                    </span>
+                </div>
+                <div id="academicCourseList" class="space-y-1.5 max-h-60 overflow-y-auto pr-1">
+                    <div class="px-3 py-2 text-xs text-secondary text-center">Memuat mata kuliah...</div>
+                </div>
+            </div>
         </div>
 
         <!-- Footer Links -->
@@ -416,7 +432,8 @@
     <!-- ============ Scripts ============ -->
     <script src="lib/prism.js"></script>
     <script src="lib/marked.min.js"></script>
-    <script src="api_adapter.js?v=2.2"></script>
-    <script src="ui_handler.js?v=2.2"></script>
+    <script src="api_adapter.js?v=2.3"></script>
+    <script src="academic_panel.js?v=2.3"></script>
+    <script src="ui_handler.js?v=2.3"></script>
 </body>
 </html>

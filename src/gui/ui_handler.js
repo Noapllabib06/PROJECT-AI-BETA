@@ -73,7 +73,8 @@ const TOOL_LABELS = {
     ingest_course_materials: 'Kuliah',
     search_course_materials: 'Kuliah',
     list_enrolled_courses: 'Kuliah',
-    generate_study_quiz: 'Kuis'
+    generate_study_quiz: 'Kuis',
+    summarize_course_materials: 'Rangkuman'
 };
 
 const TOOL_ICONS = {
@@ -84,7 +85,7 @@ const TOOL_ICONS = {
     'Vision': 'visibility', 'Memori': 'psychology',
     'Kredensial': 'key', 'Info Sistem': 'info',
     'Second Brain': 'neurology', 'MarkItDown': 'edit_note', 'GitHub': 'code_blocks',
-    'Kuliah': 'school', 'Kuis': 'quiz'
+    'Kuliah': 'school', 'Kuis': 'quiz', 'Rangkuman': 'auto_stories'
 };
 
 let activeConversationId = null;

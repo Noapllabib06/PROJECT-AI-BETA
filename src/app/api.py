@@ -233,6 +233,28 @@ async def confirm_save_file(req: ConfirmSaveRequest):
         return {"success": False, "error": str(e)}
 
 
+# ==================== ACADEMIC HUB ====================
+
+@app.get("/api/academic/courses")
+async def list_academic_courses():
+    """List detected academic courses and file counts from data/kuliah/."""
+    from src.tools.academic_tools import DEFAULT_COURSES_DIR
+    courses = []
+    if DEFAULT_COURSES_DIR.exists():
+        for item in sorted(DEFAULT_COURSES_DIR.iterdir()):
+            if item.is_dir() and not item.name.startswith((".", "_")):
+                files = [f.name for f in item.iterdir() if f.is_file() and not f.name.startswith((".", "_"))]
+                has_manifest = (item / "_course_manifest.json").exists()
+                courses.append({
+                    "name": item.name.replace("_", " "),
+                    "folder": item.name,
+                    "files_count": len(files),
+                    "files": files[:8],
+                    "has_manifest": has_manifest
+                })
+    return {"success": True, "courses": courses, "total": len(courses)}
+
+
 # ==================== WEBSOCKET STREAMING ====================
 
 @app.websocket("/ws/chat")
