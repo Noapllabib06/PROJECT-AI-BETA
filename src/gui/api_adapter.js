@@ -92,6 +92,17 @@
                     activeStreamRejecter = null;
                 }
                 break;
+            case 'cancelled':
+                if (activeStreamResolver) {
+                    activeStreamResolver({
+                        success: false,
+                        response: msg.message || 'Proses berhasil dibatalkan oleh pengguna.',
+                        is_cancelled: true
+                    });
+                    activeStreamResolver = null;
+                    activeStreamRejecter = null;
+                }
+                break;
             case 'error':
                 if (activeStreamRejecter) {
                     activeStreamRejecter(new Error(msg.message || 'Stream error'));
@@ -150,6 +161,31 @@
                 // Fallback to REST POST if WebSocket is unavailable
                 console.warn('[API Adapter] WebSocket not open, falling back to HTTP REST /api/chat');
                 return await window.jarvis.sendCommand(input);
+            }
+        },
+
+        cancelCommand: async () => {
+            console.log('[API Adapter] Sending cancel command...');
+            if (socket && socket.readyState === WebSocket.OPEN) {
+                try {
+                    socket.send(JSON.stringify({ type: 'cancel' }));
+                } catch (e) {
+                    console.warn('[API Adapter] Error sending cancel over WS:', e);
+                }
+            }
+            try {
+                await fetch(`${API_BASE}/api/chat/cancel`, { method: 'POST' });
+            } catch (e) {
+                // Ignore fallback error
+            }
+            if (activeStreamResolver) {
+                activeStreamResolver({
+                    success: false,
+                    response: 'Proses berhasil dibatalkan oleh pengguna.',
+                    is_cancelled: true
+                });
+                activeStreamResolver = null;
+                activeStreamRejecter = null;
             }
         },
 

@@ -255,13 +255,70 @@ async def list_academic_courses():
     return {"success": True, "courses": courses, "total": len(courses)}
 
 
-# ==================== WEBSOCKET STREAMING ====================
+# ==================== CANCELLATION & WEBSOCKET STREAMING ====================
+
+active_chat_tasks: Dict[str, asyncio.Task] = {}
+
+
+@app.post("/api/chat/cancel")
+async def cancel_chat_request():
+    """Cancels any ongoing chat execution."""
+    cancelled_count = 0
+    for task in list(active_chat_tasks.values()):
+        if not task.done():
+            task.cancel()
+            cancelled_count += 1
+    active_chat_tasks.clear()
+    logger.info(f"Cancelled {cancelled_count} active chat tasks.")
+    return {"success": True, "cancelled": cancelled_count}
+
 
 @app.websocket("/ws/chat")
 async def websocket_chat_endpoint(websocket: WebSocket):
-    """Bidirectional WebSocket for real-time trace events, token streaming, and chat."""
+    """Bidirectional WebSocket for real-time trace events, token streaming, and cancellation."""
     await websocket.accept()
     logger.info("WebSocket client connected to /ws/chat")
+    session_id = str(id(websocket))
+    current_task: Optional[asyncio.Task] = None
+
+    async def execute_and_stream(query: str, conv_id: Optional[str]):
+        # Event handler to stream trace events directly to UI
+        async def send_trace(event: Dict[str, Any]):
+            try:
+                await websocket.send_json({"type": "trace", "data": event})
+            except Exception as ex:
+                logger.debug(f"Trace send error: {ex}")
+
+        def sync_trace_bridge(event: Dict[str, Any]):
+            asyncio.create_task(send_trace(event))
+
+        # Send initial processing status
+        await websocket.send_json({"type": "status", "data": "Memproses..."})
+
+        # Execute pipeline
+        result = await orchestrator.execute_query(
+            user_query=query,
+            conversation_id=conv_id,
+            on_trace=sync_trace_bridge
+        )
+
+        # Stream response in chunks for typewriter effect
+        response_text = result.response
+        chunk_size = 12
+        for i in range(0, len(response_text), chunk_size):
+            chunk = response_text[i:i + chunk_size]
+            await websocket.send_json({"type": "token", "data": chunk})
+            await asyncio.sleep(0.01)
+
+        # Send completion payload
+        await websocket.send_json({
+            "type": "done",
+            "success": result.success,
+            "response": result.response,
+            "conversation_id": result.conversation_id,
+            "tools_used": result.tools_used,
+            "traces": result.traces
+        })
 
     try:
         while True:
@@ -272,54 +329,64 @@ async def websocket_chat_endpoint(websocket: WebSocket):
                 await websocket.send_json({"type": "error", "message": "Invalid JSON format."})
                 continue
 
+            msg_type = data.get("type", "chat")
+
+            if msg_type == "cancel":
+                if current_task and not current_task.done():
+                    logger.info("Cancelling current chat execution on user request...")
+                    current_task.cancel()
+                    current_task = None
+                    active_chat_tasks.pop(session_id, None)
+                    await websocket.send_json({
+                        "type": "cancelled",
+                        "message": "Proses berhasil dibatalkan oleh pengguna."
+                    })
+                continue
+
             query = data.get("query") or data.get("text") or ""
             conv_id = data.get("conversation_id")
             
             if not query.strip():
                 continue
 
-            # Event handler to stream trace events directly to UI
-            async def send_trace(event: Dict[str, Any]):
+            # Cancel any existing task for this session before starting new one
+            if current_task and not current_task.done():
+                current_task.cancel()
+
+            async def task_runner(q: str, cid: Optional[str]):
                 try:
-                    await websocket.send_json({"type": "trace", "data": event})
+                    await execute_and_stream(q, cid)
+                except asyncio.CancelledError:
+                    logger.info("Chat task successfully cancelled by user.")
+                    try:
+                        await websocket.send_json({
+                            "type": "cancelled",
+                            "message": "Proses berhasil dibatalkan oleh pengguna."
+                        })
+                    except Exception:
+                        pass
                 except Exception as ex:
-                    logger.debug(f"Trace send error: {ex}")
+                    logger.error(f"Error executing chat stream: {ex}")
+                    try:
+                        await websocket.send_json({"type": "error", "message": str(ex)})
+                    except Exception:
+                        pass
+                finally:
+                    active_chat_tasks.pop(session_id, None)
 
-            def sync_trace_bridge(event: Dict[str, Any]):
-                asyncio.create_task(send_trace(event))
-
-            # Send initial processing status
-            await websocket.send_json({"type": "status", "data": "Memproses..."})
-
-            # Execute pipeline
-            result = await orchestrator.execute_query(
-                user_query=query,
-                conversation_id=conv_id,
-                on_trace=sync_trace_bridge
-            )
-
-            # Stream response in chunks for typewriter effect
-            response_text = result.response
-            chunk_size = 12
-            for i in range(0, len(response_text), chunk_size):
-                chunk = response_text[i:i + chunk_size]
-                await websocket.send_json({"type": "token", "data": chunk})
-                await asyncio.sleep(0.01)
-
-            # Send completion payload
-            await websocket.send_json({
-                "type": "done",
-                "success": result.success,
-                "response": result.response,
-                "conversation_id": result.conversation_id,
-                "tools_used": result.tools_used,
-                "traces": result.traces
-            })
+            current_task = asyncio.create_task(task_runner(query, conv_id))
+            active_chat_tasks[session_id] = current_task
 
     except (WebSocketDisconnect, ConnectionResetError, asyncio.CancelledError):
         logger.info("WebSocket client disconnected from /ws/chat")
+        if current_task and not current_task.done():
+            current_task.cancel()
+        active_chat_tasks.pop(session_id, None)
     except Exception as e:
         logger.error(f"WebSocket session error: {e}")
+        if current_task and not current_task.done():
+            current_task.cancel()
+        active_chat_tasks.pop(session_id, None)
 
 
 # ==================== STATIC GUI MOUNT ====================

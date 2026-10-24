@@ -14,6 +14,7 @@
 const chatMessages = document.getElementById('chatMessages');
 const userInput = document.getElementById('userInput');
 const sendBtn = document.getElementById('sendBtn');
+const cancelBtn = document.getElementById('cancelBtn');
 const voiceBtn = document.getElementById('voiceBtn');
 const attachBtn = document.getElementById('attachBtn');
 const imageInput = document.getElementById('imageInput');
@@ -860,7 +861,11 @@ async function sendMessage() {
     if (isProcessing) return;
 
     isProcessing = true;
-    sendBtn.disabled = true;
+    sendBtn.classList.add('hidden');
+    if (cancelBtn) {
+        cancelBtn.classList.remove('hidden');
+        cancelBtn.disabled = false;
+    }
     userInput.value = '';
     userInput.style.height = 'auto'; // reset textarea height
 
@@ -923,17 +928,28 @@ async function sendMessage() {
         const result = await window.jarvis.sendCommandStream(payload);
         const finalText = result?.response;
 
-        if (!result?.success) {
+        if (result?.is_cancelled) {
+            refs.thinkingLabel.textContent = 'Dibatalkan oleh pengguna';
+            if (firstTokenReceived) {
+                refs.messageText.innerHTML += '<div class="mt-2 text-xs font-semibold text-amber-500 flex items-center gap-1.5 bg-amber-500/10 px-2.5 py-1 rounded-lg border border-amber-500/20"><span class="material-symbols-outlined text-[15px]">cancel</span> Proses dihentikan oleh pengguna.</div>';
+            } else {
+                refs.messageText.innerHTML = '<div class="text-xs font-semibold text-amber-500 flex items-center gap-1.5 bg-amber-500/10 px-2.5 py-1 rounded-lg border border-amber-500/20"><span class="material-symbols-outlined text-[15px]">cancel</span> Proses dibatalkan oleh pengguna.</div>';
+            }
+        } else if (!result?.success) {
             refs.messageText.innerHTML = renderMarkdownLite(finalText || 'Terjadi kesalahan tidak diketahui.');
         } else if (!firstTokenReceived && finalText) {
             refs.messageText.innerHTML = renderMarkdownLite(finalText);
         }
-        refs.thinkingLabel.textContent = 'Proses berpikir selesai';
+        if (!result?.is_cancelled) {
+            refs.thinkingLabel.textContent = 'Proses berpikir selesai';
+        }
     } catch (err) {
         refs.messageText.textContent = `❌ Terjadi kesalahan: ${err.message || err}`;
     } finally {
         statusText.textContent = 'Ready';
         isProcessing = false;
+        sendBtn.classList.remove('hidden');
+        if (cancelBtn) cancelBtn.classList.add('hidden');
         sendBtn.disabled = false;
 
         // Render response tags (tool badges)
@@ -960,6 +976,24 @@ userInput?.addEventListener('keydown', (e) => {
     if (e.key === 'Enter' && !e.shiftKey) {
         e.preventDefault();
         sendMessage();
+    }
+});
+
+// ===================== CANCEL PROCESS (STOP BUTTON) =====================
+cancelBtn?.addEventListener('click', async () => {
+    if (!isProcessing) return;
+    statusText.textContent = 'Membatalkan...';
+    cancelBtn.disabled = true;
+    try {
+        await window.jarvis.cancelCommand();
+    } catch (err) {
+        console.warn('Error cancelling command:', err);
+    }
+});
+
+window.addEventListener('keydown', (e) => {
+    if (e.key === 'Escape' && isProcessing) {
+        cancelBtn?.click();
     }
 });
 
