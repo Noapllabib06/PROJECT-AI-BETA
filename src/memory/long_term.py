@@ -288,7 +288,8 @@ class LongTermMemory:
         self,
         query_text: str,
         query_vector: Optional[List[float]] = None,
-        top_k: int = 3
+        top_k: int = 3,
+        filter_metadata: Optional[Dict[str, Any]] = None
     ) -> List[Dict[str, Any]]:
         if not self.documents:
             return []
@@ -302,7 +303,7 @@ class LongTermMemory:
             emb = emb / norm
 
         # 1. Vector Search
-        search_k = min(top_k * 3, len(self.documents))
+        search_k = min(max(top_k * 5, 25), len(self.documents))
         vec_scores, vec_indices = self.vector_backend.search(emb, k=search_k)
 
         # 2. BM25 Search
@@ -330,15 +331,37 @@ class LongTermMemory:
         sorted_rrf = sorted(rrf_scores.items(), key=lambda x: x[1], reverse=True)
 
         results = []
-        for internal_id, score in sorted_rrf[:top_k]:
+        for internal_id, score in sorted_rrf:
             doc_data = self.documents[internal_id]
+            meta = doc_data.get("metadata", {})
+
+            # Filter metadata check
+            if filter_metadata:
+                match = True
+                for f_key, f_val in filter_metadata.items():
+                    doc_val = meta.get(f_key)
+                    if doc_val is None:
+                        match = False
+                        break
+                    if isinstance(f_val, str) and isinstance(doc_val, str):
+                        if f_val.lower() not in doc_val.lower():
+                            match = False
+                            break
+                    elif f_val != doc_val:
+                        match = False
+                        break
+                if not match:
+                    continue
+
             results.append({
                 "internal_id": internal_id,
                 "id": doc_data["id"],
                 "text": doc_data["text"],
                 "score": float(score),
-                "metadata": doc_data.get("metadata", {})
+                "metadata": meta
             })
+            if len(results) >= top_k:
+                break
 
         return results
 

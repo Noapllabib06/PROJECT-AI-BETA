@@ -58,9 +58,14 @@ class MemoryStore:
         id_str = doc_id or f"mem_{self.long_term.current_id}"
         return self.long_term.add_memory(doc_id=id_str, text=text, metadata=metadata)
 
-    def recall(self, query: str, top_k: int = 3) -> List[Dict[str, Any]]:
-        """Search long-term memory using hybrid Dense Vector + BM25."""
-        return self.long_term.search_memory(query_text=query, top_k=top_k)
+    def recall(
+        self,
+        query: str,
+        top_k: int = 3,
+        filter_metadata: Optional[Dict[str, Any]] = None
+    ) -> List[Dict[str, Any]]:
+        """Search long-term memory using hybrid Dense Vector + BM25 with optional metadata filtering."""
+        return self.long_term.search_memory(query_text=query, top_k=top_k, filter_metadata=filter_metadata)
 
     def add_facts(self, facts: Union[List[str], str]) -> int:
         return self.long_term.add_facts(facts)

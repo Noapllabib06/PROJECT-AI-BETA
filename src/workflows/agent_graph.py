@@ -266,7 +266,7 @@ Gunakan struktur:
 1. Ringkasan Inti (langsung menjawab tanpa basa-basi teknis).
 2. Poin-Poin Kunci & Analisis (gunakan bullet points tebal: - **Poin**: Penjelasan).
 3. Konteks/Dampak penting bila ada.
-4. Tautan Sumber & Referensi jika tersedia dari hasil tool.
+4. Tautan Sumber & Referensi HANYA JIKA tersedia URL nyata dari hasil tool web. DILARANG KERAS mencantumkan tautan fiktif seperti 'example.com' atau sejenisnya. Jika tidak ada data pencarian web, JANGAN buat seksi referensi!
 DILARANG menggunakan format JSON atau menyebutkan label internal sistem."""
 
             try:

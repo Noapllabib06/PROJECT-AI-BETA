@@ -89,7 +89,23 @@ TOOL_KEYWORD_RULES: Dict[str, List[str]] = {
     "search_second_brain": ["cari di second brain", "cari di catatan", "cari di obsidian", "cari di vault"],
     "read_github_repo": ["baca github", "baca repo", "analisis github", "pelajari repo", "cek github", "github.com/"],
     "read_github_file": ["baca file github", "lihat kode github", "baca kode github"],
-    "clone_and_ingest_github": ["clone github", "kloning repo", "ingest github", "pelajari repo github"]
+    "clone_and_ingest_github": ["clone github", "kloning repo", "ingest github", "pelajari repo github"],
+    "ingest_course_materials": [
+        "masukkan materi kuliah", "ingest materi kuliah", "simpan materi kuliah",
+        "indeks materi kuliah", "tambahkan materi kuliah", "ingest folder kuliah",
+        "masukkan slide kuliah", "baca materi kuliah"
+    ],
+    "search_course_materials": [
+        "materi pertemuan", "slide kuliah", "catatan kuliah", "tugas kuliah",
+        "tanya materi kuliah", "cari materi kuliah", "pelajari pertemuan", "materi kuliah"
+    ],
+    "list_enrolled_courses": [
+        "daftar mata kuliah", "daftar matkul", "matkul apa saja", "mata kuliah apa saja", "list matkul"
+    ],
+    "generate_study_quiz": [
+        "kuis latihan", "latihan ujian", "kisi-kisi uts", "kisi-kisi uas", "buatkan kuis",
+        "soal latihan", "latihan soal", "simulasi ujian"
+    ]
 }
 
 

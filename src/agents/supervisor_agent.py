@@ -122,6 +122,24 @@ class SupervisorAgent(BaseAgent):
             except Exception:
                 pass
 
+        # 4. Remove placeholder / dummy links (e.g. example.com, domain.com, etc.)
+        dummy_link_pattern = re.compile(
+            r"[-*]?\s*\[.*?\]\(https?://(?:www\.)?(?:example\.(?:com|org|net)|domain\.com|mysite\.com|test\.com|yourdomain\.com)[^\)]*\)\s*\n?",
+            re.IGNORECASE
+        )
+        if dummy_link_pattern.search(cleaned):
+            cleaned = dummy_link_pattern.sub("", cleaned)
+            applied_corrections.append("Removed placeholder dummy links (example.com)")
+
+        # 4.1 Remove empty source & reference section headings after cleanup
+        empty_source_section_pattern = re.compile(
+            r"\n*###?\s*(?:🔗\s*)?(?:Tautan\s+)?Sumber(?:\s*&\s*Referensi)?\s*:?\s*(?:\n\s*[-*]?\s*)*\Z",
+            re.IGNORECASE
+        )
+        if empty_source_section_pattern.search(cleaned):
+            cleaned = empty_source_section_pattern.sub("", cleaned).strip()
+            applied_corrections.append("Removed empty source & reference section")
+
         return cleaned.strip(), applied_corrections
 
     def synthesize_tool_results(

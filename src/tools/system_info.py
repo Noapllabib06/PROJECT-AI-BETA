@@ -53,6 +53,9 @@ def get_jarvis_capabilities(query: str = "") -> str:
         "🔢 Utilitas, Matematika & Waktu": [
             "calculate", "get_datetime"
         ],
+        "🎓 Basis Pengetahuan Akademik & Kuliah": [
+            "ingest_course_materials", "search_course_materials", "list_enrolled_courses", "generate_study_quiz"
+        ],
         "ℹ️ Metakognisi & Informasi Sistem": [
             "get_jarvis_capabilities"
         ]

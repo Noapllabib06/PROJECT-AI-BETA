@@ -139,8 +139,10 @@ PANDUAN STRUKTUR RESPON OPTIMAL (WAJIB DIPATUHI):
       - **Rincian / Ketentuan Penting**: Penjelasan fakta, pasal, atau data pendukung.
    c. **Konteks & Dampak (### 💡 Konteks & Dampak)**:
       Jelaskan implikasi, pro-kontra, latar belakang, atau perkembangan terkini terkait topik tersebut secara objektif.
-   d. **Tautan Sumber & Referensi**:
-      Jika data berasal dari pencarian web atau Wikipedia, sertakan tautan sumber di bagian paling bawah dengan format rapi: `[🔗 Sumber: Judul Artikel](URL)`.
+   d. **Tautan Sumber & Referensi (SYARAT KETAT):**
+      - Bagian ini HANYA BOLEH dicantumkan jika ada tautan URL NYATA dari hasil tool pencarian web (`search_web`, `search_wikipedia`, `read_webpage`, `read_github_repo`). Format: `[🔗 Sumber: Judul Artikel](URL)`.
+      - DILARANG KERAS mengarang, memalsukan, atau membuat tautan placeholder fiktif (seperti `example.com`, `domain.com`, dll).
+      - Jika jawaban berasal dari penjelasan konseptual internal, diskusi logika, atau dokumen lokal tanpa URL web, JANGAN TAMPILKAN seksi tautan sumber sama sekali! Akhiri jawaban langsung di kesimpulan atau analisis.
 
 3. STRUKTUR JAWABAN PRODUK / HARGA / REKOMENDASI:
    - Buat daftar rapi per produk atau kategori dengan spesifikasi utama dan kisaran harga rata-rata.

@@ -69,7 +69,11 @@ const TOOL_LABELS = {
     search_second_brain: 'Second Brain',
     read_github_repo: 'GitHub',
     read_github_file: 'GitHub',
-    clone_and_ingest_github: 'GitHub'
+    clone_and_ingest_github: 'GitHub',
+    ingest_course_materials: 'Kuliah',
+    search_course_materials: 'Kuliah',
+    list_enrolled_courses: 'Kuliah',
+    generate_study_quiz: 'Kuis'
 };
 
 const TOOL_ICONS = {
@@ -79,7 +83,8 @@ const TOOL_ICONS = {
     'Sistem': 'settings', 'Screenshot': 'screenshot_monitor',
     'Vision': 'visibility', 'Memori': 'psychology',
     'Kredensial': 'key', 'Info Sistem': 'info',
-    'Second Brain': 'neurology', 'MarkItDown': 'edit_note', 'GitHub': 'code_blocks'
+    'Second Brain': 'neurology', 'MarkItDown': 'edit_note', 'GitHub': 'code_blocks',
+    'Kuliah': 'school', 'Kuis': 'quiz'
 };
 
 let activeConversationId = null;

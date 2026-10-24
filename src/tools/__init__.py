@@ -15,9 +15,10 @@ from src.tools.custom_tool import TOOL_DEFINITIONS as CUSTOM_TOOLS
 from src.tools.system_info import TOOL_DEFINITIONS as SYSTEM_TOOLS
 from src.tools.second_brain import TOOL_DEFINITIONS as SECOND_BRAIN_TOOLS
 from src.tools.github_tool import TOOL_DEFINITIONS as GITHUB_TOOLS
+from src.tools.academic_tools import TOOL_DEFINITIONS as ACADEMIC_TOOLS
 
 ALL_TOOLS: List[Dict[str, Any]] = (
-    WEB_TOOLS + CODE_TOOLS + API_TOOLS + CUSTOM_TOOLS + SYSTEM_TOOLS + SECOND_BRAIN_TOOLS + GITHUB_TOOLS
+    WEB_TOOLS + CODE_TOOLS + API_TOOLS + CUSTOM_TOOLS + SYSTEM_TOOLS + SECOND_BRAIN_TOOLS + GITHUB_TOOLS + ACADEMIC_TOOLS
 )
 
 
@@ -49,4 +50,5 @@ __all__ = [
     "SYSTEM_TOOLS",
     "SECOND_BRAIN_TOOLS",
     "GITHUB_TOOLS",
+    "ACADEMIC_TOOLS",
 ]
