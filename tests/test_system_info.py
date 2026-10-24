@@ -103,6 +103,7 @@ def test_anti_hallucination_guardrail():
     assert len(hallucinated_calls) > 1
 
     # Intercepted!
+    corrected_calls: list[ToolCall] = []
     if len(hallucinated_calls) > 1 and not is_explicit_compound and is_question:
         if re.search(r"\b(?:bisa apa|kemampuan(?:nya)?|kapabilitas(?:nya)?|fitur(?:nya)?|tool|batasan(?:nya)?|limitasi(?:nya)?)\b", user_query, re.IGNORECASE):
             corrected_calls = [ToolCall(tool="get_jarvis_capabilities", query="")]

@@ -167,7 +167,7 @@ class AgentGraph:
                     if re.search(r"\b(?:bisa apa|kemampuan(?:nya)?|kapabilitas(?:nya)?|fitur(?:nya)?|tool|batasan(?:nya)?|limitasi(?:nya)?)\b", user_query, re.IGNORECASE):
                         recent_msgs = self.memory.get_chat_history(limit=4)
                         has_recent_repo_or_doc = any(
-                            "github" in str(m.get("content", "")).lower() or "readme" in str(m.get("content", "")).lower()
+                            "github" in m.get("content", "").lower() or "readme" in m.get("content", "").lower()
                             for m in recent_msgs
                         )
 
