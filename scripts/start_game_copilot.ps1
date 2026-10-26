@@ -3,6 +3,7 @@
 Write-Host "==========================================================" -ForegroundColor Cyan
 Write-Host "    « 智恵之王 » RAPHAEL AI GAMING COPILOT (TENSURA)     " -ForegroundColor Yellow
 Write-Host "==========================================================" -ForegroundColor Cyan
+Write-Host "[*] Mode: Pure Voice Spotter (Radio Engineer Helm Asli - 0% Gangguan Layar)" -ForegroundColor Green
 Write-Host "[*] Memulai Raphael Copilot untuk Assetto Corsa Competizione & Minecraft..." -ForegroundColor Green
 
 $venvPython = ".\venv\Scripts\python.exe"

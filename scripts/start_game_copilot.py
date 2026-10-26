@@ -23,6 +23,7 @@ from src.game_copilot.core.raphael_brain import RaphaelBrain
 from src.game_copilot.adapters.acc_adapter import ACCAdapter
 from src.game_copilot.adapters.minecraft_adapter import MinecraftAdapter
 from src.game_copilot.ui.overlay_window import RaphaelDesktopOverlay
+from src.game_copilot.ui.audio_tts import RaphaelAudioTTS
 
 logger = get_logger("GameCopilotRunner")
 
@@ -37,27 +38,27 @@ def unload_heavy_models():
         pass
 
 
-async def main_async(enable_acc: bool = True, enable_mc: bool = True, enable_voice: bool = True, enable_overlay: bool = True, model_name: str = "qwen2.5:1.5b"):
+async def main_async(enable_acc: bool = True, enable_mc: bool = True, enable_voice: bool = True, enable_overlay: bool = False, model_name: str = "qwen2.5:1.5b"):
     unload_heavy_models()
 
+    mode_desc = "DESKTOP HUD OVERLAY" if enable_overlay else "PURE VOICE SPOTTER (Radio Helm - 0% Gangguan Layar)"
     acc_status = "ACTIVE (Waiting for ACC to start...)" if enable_acc else "DISABLED"
     mc_status = "ACTIVE (Streaming .minecraft/logs/latest.log)" if enable_mc else "DISABLED"
-    overlay_status = "ENABLED (Top-Left)" if enable_overlay else "DISABLED"
     voice_status = "ENABLED (Tensura Japanese Neural Voice)" if enable_voice else "DISABLED"
 
-    print("=" * 68)
-    print("   « 智恵之王 » RAPHAEL AI GAMING COPILOT - LIVE ACTIVE SYSTEM")
-    print("=" * 68)
+    print("=" * 72)
+    print("   « 智恵之王 » RAPHAEL AI GAMING COPILOT - GT3 VOICE SPOTTER")
+    print("=" * 72)
+    print(f"[*] Operation Mode : {mode_desc}")
     print(f"[*] Active LLM Model: {model_name} (Lightweight ~980MB, Zero Game Lag)")
-    print(f"[*] Visual Overlay : {overlay_status}")
     print(f"[*] Voice Engine   : {voice_status}")
     print(f"[*] ACC Telemetry  : {acc_status}")
     print(f"[*] Minecraft Log  : {mc_status}")
-    print("=" * 68)
+    print("=" * 72)
     print("[*] Status: STANDBY. Buka game Anda (ACC / Minecraft) dan mulai bermain.")
-    print("[*] Raphael akan mendeteksi dan merespon secara otomatis.")
+    print("[*] Raphael akan berbicara langsung ke headset/speaker Anda secara otomatis.")
     print("[*] Tekan CTRL+C di terminal ini untuk berhenti.")
-    print("=" * 68)
+    print("=" * 72)
 
     overlay: Optional[RaphaelDesktopOverlay] = None
     stop_event = asyncio.Event()
@@ -79,18 +80,27 @@ async def main_async(enable_acc: bool = True, enable_mc: bool = True, enable_voi
         overlay.start()
         await asyncio.sleep(0.5)
 
+    tts: Optional[RaphaelAudioTTS] = RaphaelAudioTTS() if enable_voice else None
     brain = RaphaelBrain()
 
-    # Route event to Brain and HUD
+    # Route event to Brain, TTS, and optional HUD
     async def on_game_event(evt: GameEvent):
         reaction_dict = await brain.generate_reaction(evt)
         jp_line = reaction_dict.get("jp", "")
         en_sub = reaction_dict.get("en", "")
-        print(f"\n[EVENT DETECTED] [{evt.game_name}] {evt.event_type} - {evt.summary}")
-        print(f"  Raphael (JP) : {jp_line}")
-        print(f"  Subtitle(EN) : {en_sub}")
+
+        print("\n" + "═" * 72)
+        print(f" 🏁 [{evt.game_name}] {evt.event_type} • {evt.summary}")
+        print("─" * 72)
+        print(f" 🔊 Raphael (JP) : {jp_line}")
+        print(f" 💬 Subtitle (EN): {en_sub}")
+        print("═" * 72)
+
         if overlay:
             overlay.display_event(evt, reaction_dict)
+        elif tts and jp_line:
+            # Voice Spotter mode: trigger authentic Japanese speech directly into headphones!
+            asyncio.create_task(tts.speak_japanese(jp_line))
 
     event_bus.subscribe(on_game_event)
 
@@ -129,10 +139,10 @@ async def main_async(enable_acc: bool = True, enable_mc: bool = True, enable_voi
 
 def main():
     parser = argparse.ArgumentParser(description="Raphael AI Gaming Copilot Live Runner")
+    parser.add_argument("--overlay", action="store_true", help="Aktifkan desktop HUD overlay (default: False / Pure Voice Spotter)")
     parser.add_argument("--no-acc", action="store_true", help="Nonaktifkan sensor Assetto Corsa Competizione")
     parser.add_argument("--no-mc", action="store_true", help="Nonaktifkan sensor Minecraft")
-    parser.add_argument("--no-voice", action="store_true", help="Nonaktifkan suara Jepang (hanya visual)")
-    parser.add_argument("--no-overlay", action="store_true", help="Nonaktifkan desktop overlay (hanya terminal/web)")
+    parser.add_argument("--no-voice", action="store_true", help="Nonaktifkan suara Jepang (hanya terminal)")
     args = parser.parse_args()
 
     try:
@@ -140,7 +150,7 @@ def main():
             enable_acc=not args.no_acc,
             enable_mc=not args.no_mc,
             enable_voice=not args.no_voice,
-            enable_overlay=not args.no_overlay
+            enable_overlay=args.overlay
         ))
     except KeyboardInterrupt:
         pass
