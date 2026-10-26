@@ -176,8 +176,8 @@ class RaphaelBrain:
                     "en": f"<Warning. Master's vital signs zeroed. Cause: {cause}. Reviving consciousness. Analyzing lethal vectors.>"
                 },
                 {
-                    "jp": f"<警告。肉体損傷臨界突破。即時転生シーケンスを実行。次は同じ轍を踏みません、マスター。>",
-                    "en": f"<Warning. Critical trauma sustained. Executing immediate respawn sequence. Countermeasures ready, Master.>"
+                    "jp": f"<警告。要因『{cause}』による肉体損傷臨界突破。即時転生シーケンスを実行。次は同じ轍を踏みません、マスター。>",
+                    "en": f"<Warning. Critical trauma from '{cause}'. Executing immediate respawn sequence. Countermeasures ready, Master.>"
                 }
             ]
             return random.choice(pool)

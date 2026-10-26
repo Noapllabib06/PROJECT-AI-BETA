@@ -221,20 +221,54 @@ class RaphaelDesktopOverlay:
         # ==================== WIN32 ABSOLUTE TOPMOST ENFORCEMENT ====================
         if sys.platform == "win32":
             import ctypes
+
+            HWND_TOPMOST = ctypes.c_void_p(-1)
+            SWP_NOSIZE = 0x0001
+            SWP_NOMOVE = 0x0002
+            SWP_NOACTIVATE = 0x0010
+            SWP_SHOWWINDOW = 0x0040
+            TOPMOST_FLAGS = SWP_NOSIZE | SWP_NOMOVE | SWP_NOACTIVATE | SWP_SHOWWINDOW  # 0x0053
+
+            GWL_EXSTYLE = -20
+            WS_EX_TOPMOST = 0x00000008
+            WS_EX_TOOLWINDOW = 0x00000080
+
+            def _get_root_hwnd():
+                if not self.root:
+                    return None
+                try:
+                    child = self.root.winfo_id()
+                    root_hw = ctypes.windll.user32.GetAncestor(child, 3)  # GA_ROOTOWNER
+                    return root_hw if root_hw else child
+                except Exception:
+                    return None
+
+            try:
+                root_hwnd = _get_root_hwnd()
+                if root_hwnd:
+                    ex_style = ctypes.windll.user32.GetWindowLongW(root_hwnd, GWL_EXSTYLE)
+                    ctypes.windll.user32.SetWindowLongW(root_hwnd, GWL_EXSTYLE, ex_style | WS_EX_TOPMOST | WS_EX_TOOLWINDOW)
+            except Exception:
+                pass
+
             def _enforce_win32_topmost():
                 if not self.root:
                     return
                 try:
-                    hwnd = self.root.winfo_id()
-                    # HWND_TOPMOST = -1, SWP_NOSIZE = 0x0001, SWP_NOMOVE = 0x0002, SWP_NOACTIVATE = 0x0010
-                    # Calling SetWindowPos periodically prevents DirectX exclusive/borderless windows from burying HUD
-                    ctypes.windll.user32.SetWindowPos(hwnd, -1, 0, 0, 0, 0, 0x0013)
+                    root_hwnd = _get_root_hwnd()
+                    if root_hwnd:
+                        ctypes.windll.user32.SetWindowPos(
+                            root_hwnd,
+                            HWND_TOPMOST,
+                            0, 0, 0, 0,
+                            TOPMOST_FLAGS
+                        )
                 except Exception:
                     pass
                 if self.root:
-                    self.root.after(1200, _enforce_win32_topmost)
+                    self.root.after(400, _enforce_win32_topmost)
 
-            self.root.after(300, _enforce_win32_topmost)
+            self.root.after(200, _enforce_win32_topmost)
 
         # Periodic queue checker
         self.root.after(100, self._process_queue)
