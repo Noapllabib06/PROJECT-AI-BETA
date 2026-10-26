@@ -1,67 +1,98 @@
-"""TTS Audio module for Raphael's serene, analytical voice using Windows Native SAPI."""
+"""Raphael Authentic Japanese TTS Voice using Edge-TTS NanamiNeural and WinMM Native Playback."""
 
+import os
 import re
 import sys
+import uuid
+import ctypes
 import asyncio
-import subprocess
+from pathlib import Path
 from typing import Optional
 from config.settings import get_logger
 
 logger = get_logger("RaphaelAudioTTS")
 
+CACHE_DIR = Path(__file__).resolve().parent.parent.parent.parent / "data" / "raw" / "audio_cache"
+CACHE_DIR.mkdir(parents=True, exist_ok=True)
 
-def clean_text_for_speech(text: str) -> str:
-    """Prepares text for natural speech synthesis by removing special brackets."""
-    # Convert <Notice. Text> -> Notice. Text
-    cleaned = re.sub(r"[<>]", "", text)
-    # Convert lap times like 1:47.320 into speakable format
-    cleaned = re.sub(r"(\d+):(\d+)\.(\d+)", r"\1 minute \2 point \3 seconds", cleaned)
-    # Convert +/- delta like +0.450s into speakable format
-    cleaned = re.sub(r"\+([0-9.]+)\s*s", r"plus \1 seconds", cleaned)
-    cleaned = re.sub(r"\-([0-9.]+)\s*s", r"minus \1 seconds", cleaned)
+
+def clean_japanese_for_speech(text: str) -> str:
+    """Prepares Japanese text for natural speech synthesis by removing anime notice brackets."""
+    # Remove < > or « »
+    cleaned = re.sub(r"[<«》>『』]", "", text)
+    # Ensure natural pauses around Kokuchi (告。) or Kai (解。)
+    cleaned = re.sub(r"^(告|解|報告|警告)[。、\.\s]*", r"\1、", cleaned)
     return cleaned.strip()
 
 
 class RaphaelAudioTTS:
-    """Non-blocking Windows Speech Synthesizer for Raphael persona."""
+    """High-fidelity Tensura voice synthesizer using Japanese neural voice NanamiNeural."""
 
-    def __init__(self, voice_name: str = "Microsoft Zira Desktop", rate: int = 1):
+    def __init__(self, voice_name: str = "ja-JP-NanamiNeural", rate: str = "+0%"):
         self.voice_name = voice_name
-        self.rate = rate  # -10 to 10
+        self.rate = rate
         self._enabled = True
+        self._lock = asyncio.Lock()
 
     def set_enabled(self, enabled: bool) -> None:
         self._enabled = enabled
 
-    async def speak(self, text: str) -> None:
-        """Asynchronously triggers voice synthesis without blocking the event loop."""
+    def _play_audio_file(self, file_path: str) -> None:
+        """Plays audio file using native Windows Multimedia MCI with 0% latency and no extra tools."""
+        if sys.platform != "win32":
+            logger.debug(f"[Non-Windows TTS Mock] Playing: {file_path}")
+            return
+
+        try:
+            alias = f"r_audio_{uuid.uuid4().hex[:8]}"
+            abs_path = os.path.abspath(file_path)
+            # Open media file via winmm
+            ctypes.windll.winmm.mciSendStringW(f'open "{abs_path}" type mpegvideo alias {alias}', None, 0, None)
+            # Play and wait for completion in background worker thread
+            ctypes.windll.winmm.mciSendStringW(f"play {alias} wait", None, 0, None)
+            ctypes.windll.winmm.mciSendStringW(f"close {alias}", None, 0, None)
+        except Exception as e:
+            logger.warning(f"WinMM audio playback exception: {e}")
+
+    async def speak_japanese(self, jp_text: str) -> None:
+        """Asynchronously synthesizes Japanese speech using edge-tts and plays it."""
         if not self._enabled:
             return
 
-        speech_text = clean_text_for_speech(text)
+        speech_text = clean_japanese_for_speech(jp_text)
         if not speech_text:
             return
 
-        # Run non-blocking subprocess in executor thread
-        loop = asyncio.get_event_loop()
-        await loop.run_in_executor(None, self._speak_sync, speech_text)
+        temp_audio_file = CACHE_DIR / f"raphael_voice_{uuid.uuid4().hex[:8]}.mp3"
 
-    def _speak_sync(self, text: str) -> None:
-        """Executes Windows SAPI speech synthesis via PowerShell."""
-        if sys.platform != "win32":
-            logger.debug(f"[Non-Windows TTS Mock] Raphael: {text}")
-            return
+        try:
+            import edge_tts
+            communicate = edge_tts.Communicate(speech_text, self.voice_name, rate=self.rate)
+            await communicate.save(str(temp_audio_file))
 
-        # Sanitize single quotes for PowerShell
-        safe_text = text.replace("'", "''").replace('"', '`"')
+            # Play in worker thread so event loop remains free
+            loop = asyncio.get_event_loop()
+            await loop.run_in_executor(None, self._play_audio_file, str(temp_audio_file))
+        except Exception as e:
+            logger.warning(f"Edge-TTS synthesis error ({e}), falling back to Windows SAPI.")
+            self._fallback_sapi(speech_text)
+        finally:
+            # Clean up temp file
+            if temp_audio_file.exists():
+                try:
+                    temp_audio_file.unlink()
+                except Exception:
+                    pass
+
+    def _fallback_sapi(self, text: str) -> None:
+        """Fallback to Windows SAPI."""
+        import subprocess
+        safe_text = text.replace("'", "''")
         ps_cmd = (
             f"Add-Type -AssemblyName System.Speech; "
             f"$synth = New-Object System.Speech.Synthesis.SpeechSynthesizer; "
-            f"try {{ $synth.SelectVoice('{self.voice_name}') }} catch {{ }}; "
-            f"$synth.Rate = {self.rate}; "
             f"$synth.Speak('{safe_text}');"
         )
-
         try:
             subprocess.run(
                 ["powershell", "-NoProfile", "-NonInteractive", "-Command", ps_cmd],
@@ -69,5 +100,9 @@ class RaphaelAudioTTS:
                 creationflags=subprocess.CREATE_NO_WINDOW if sys.platform == "win32" else 0,
                 timeout=10,
             )
-        except Exception as e:
-            logger.warning(f"Raphael TTS playback warning: {e}")
+        except Exception:
+            pass
+
+    async def speak(self, text: str) -> None:
+        """General interface accepting Japanese text."""
+        await self.speak_japanese(text)

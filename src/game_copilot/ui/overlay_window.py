@@ -1,8 +1,9 @@
-"""Native Transparent Top-Left Desktop HUD Overlay for Raphael Gaming Copilot."""
+"""Native Transparent Desktop HUD Overlay with Authentic Tensura Aesthetic, Bilingual Display, and Idle State."""
 
 import sys
 import queue
 import threading
+import asyncio
 import tkinter as tk
 from tkinter import font as tkfont
 from typing import Optional, Dict, Any
@@ -16,7 +17,7 @@ logger = get_logger("RaphaelHUDOverlay")
 class RaphaelDesktopOverlay:
     """Always-on-top, borderless desktop HUD located in the top-left corner."""
 
-    def __init__(self, x: int = 24, y: int = 24, width: int = 460, height: int = 140, enable_tts: bool = True):
+    def __init__(self, x: int = 24, y: int = 24, width: int = 480, height: int = 160, enable_tts: bool = True):
         self.x = x
         self.y = y
         self.width = width
@@ -28,7 +29,8 @@ class RaphaelDesktopOverlay:
         self._thread: Optional[threading.Thread] = None
         self._tts = RaphaelAudioTTS()
         self._running = False
-        self._fade_after_id = None
+        self._idle_timer_id = None
+        self._idle_timeout_ms = 9000  # Return to idle after 9 seconds
 
     def start(self) -> None:
         """Launches the Tkinter overlay in a dedicated daemon thread."""
@@ -60,7 +62,7 @@ class RaphaelDesktopOverlay:
 
         # Header Frame
         header = tk.Frame(self.inner_frame, bg=bg_color)
-        header.pack(fill=tk.X, padx=12, pady=(10, 4))
+        header.pack(fill=tk.X, padx=12, pady=(8, 2))
 
         # Title Label
         title_font = tkfont.Font(family="Segoe UI", size=11, weight="bold")
@@ -77,7 +79,7 @@ class RaphaelDesktopOverlay:
         status_font = tkfont.Font(family="Consolas", size=9)
         self.lbl_status = tk.Label(
             header,
-            text="STANDBY • MONITORING",
+            text="IDLE • SOUL LINK STABLE",
             font=status_font,
             fg="#7dd3fc",
             bg=bg_color
@@ -88,38 +90,51 @@ class RaphaelDesktopOverlay:
         badge_font = tkfont.Font(family="Segoe UI", size=8, weight="bold")
         self.lbl_badge = tk.Label(
             self.inner_frame,
-            text="SYSTEM READY",
+            text="STANDBY",
             font=badge_font,
-            fg="#ffd166",
-            bg="#1e2238",
+            fg="#00f0ff",
+            bg="#101827",
             padx=6,
             pady=1
         )
-        self.lbl_badge.pack(anchor="w", padx=12, pady=(2, 4))
+        self.lbl_badge.pack(anchor="w", padx=12, pady=(1, 3))
 
-        # Reaction / Speech Text
-        speech_font = tkfont.Font(family="Segoe UI", size=10)
-        self.lbl_speech = tk.Label(
+        # Japanese Voice Text (Line 1)
+        jp_font = tkfont.Font(family="Meiryo", size=10, weight="bold")
+        self.lbl_speech_jp = tk.Label(
             self.inner_frame,
-            text="<Notice. Wisdom Lord Raphael is synchronized with Master's gameplay.>",
-            font=speech_font,
+            text="<告。魂の回廊（ソウルリンク）は安定。戦況を常時観測中です、マスター。>",
+            font=jp_font,
             fg="#ffffff",
             bg=bg_color,
             justify=tk.LEFT,
-            wraplength=self.width - 30
+            wraplength=self.width - 24
         )
-        self.lbl_speech.pack(anchor="w", padx=12, pady=(0, 6))
+        self.lbl_speech_jp.pack(anchor="w", padx=12, pady=(0, 2))
+
+        # English Subtitle (Line 2)
+        en_font = tkfont.Font(family="Segoe UI", size=9, slant="italic")
+        self.lbl_speech_en = tk.Label(
+            self.inner_frame,
+            text="[Subtitle] <Notice. Soul corridor is stable. Actively monitoring field conditions, Master.>",
+            font=en_font,
+            fg="#ffd166",
+            bg=bg_color,
+            justify=tk.LEFT,
+            wraplength=self.width - 24
+        )
+        self.lbl_speech_en.pack(anchor="w", padx=12, pady=(0, 4))
 
         # Telemetry / Details Strip
         telem_font = tkfont.Font(family="Consolas", size=8)
         self.lbl_telem = tk.Label(
             self.inner_frame,
-            text="DELTA: +0.000s | OPTIMAL RHYTHM",
+            text="STATUS: OPTIMAL | LINK: 100% SYNCHRONIZED",
             font=telem_font,
             fg="#38bdf8",
             bg=bg_color
         )
-        self.lbl_telem.pack(anchor="w", padx=12, pady=(0, 8))
+        self.lbl_telem.pack(anchor="w", padx=12, pady=(0, 6))
 
         # Periodic queue checker
         self.root.after(100, self._process_queue)
@@ -137,12 +152,30 @@ class RaphaelDesktopOverlay:
         if self.root:
             self.root.after(100, self._process_queue)
 
+    def _set_idle_state(self) -> None:
+        """Restores the HUD to serene, ambient idle state when no events occur."""
+        if not self.root:
+            return
+        self.root.configure(bg="#00f0ff")
+        self.lbl_status.config(text="IDLE • SOUL LINK STABLE", fg="#7dd3fc")
+        self.lbl_badge.config(text="STANDBY", bg="#101827", fg="#00f0ff")
+        self.lbl_speech_jp.config(
+            text="<告。魂の回廊（ソウルリンク）は安定。戦況を常時観測中です、マスター。>",
+            fg="#ffffff"
+        )
+        self.lbl_speech_en.config(
+            text="[Subtitle] <Notice. Soul corridor is stable. Actively monitoring field telemetry, Master.>",
+            fg="#ffd166"
+        )
+        self.lbl_telem.config(text="STATUS: OPTIMAL | LINK: 100% SYNCHRONIZED")
+
     def _apply_payload(self, payload: Dict[str, Any]) -> None:
         """Updates text and styles on Tkinter widgets."""
         game_name = payload.get("game_name", "GAME")
         event_type = payload.get("event_type", "EVENT")
         severity = payload.get("severity", "INFO")
-        reaction = payload.get("reaction", "")
+        reaction_jp = payload.get("reaction_jp", "")
+        reaction_en = payload.get("reaction_en", "")
         summary = payload.get("summary", "")
         details = payload.get("details", {})
 
@@ -162,11 +195,11 @@ class RaphaelDesktopOverlay:
 
         if self.root:
             self.root.configure(bg=border_color)
-            self.lbl_status.config(text=f"{game_name.upper()} • ACTIVE")
+            self.lbl_status.config(text=f"{game_name.upper()} • ACTIVE", fg="#e0f2fe")
             self.lbl_badge.config(text=event_type, bg=badge_bg, fg=badge_fg)
 
-            display_text = reaction or summary
-            self.lbl_speech.config(text=display_text)
+            self.lbl_speech_jp.config(text=reaction_jp or summary)
+            self.lbl_speech_en.config(text=f"[Subtitle] {reaction_en}" if reaction_en else "")
 
             # Details
             if "lap_time_str" in details:
@@ -180,23 +213,35 @@ class RaphaelDesktopOverlay:
             elif "achievement" in details:
                 self.lbl_telem.config(text=f"UNLOCK: {details.get('achievement', '').upper()} | REWARD: CONFIRMED")
             else:
-                self.lbl_telem.config(text="")
+                self.lbl_telem.config(text="TELEMETRY RECORDED • OPTIMAL")
 
-    def display_event(self, event: GameEvent, reaction: str) -> None:
-        """Sends new event and reaction to the overlay and speaks it via TTS."""
+            # Reset idle countdown
+            if self._idle_timer_id:
+                self.root.after_cancel(self._idle_timer_id)
+            self._idle_timer_id = self.root.after(self._idle_timeout_ms, self._set_idle_state)
+
+    def display_event(self, event: GameEvent, reaction_dict: Dict[str, str]) -> None:
+        """Sends new event and bilingual reaction to the overlay and speaks in Japanese."""
         payload = {
             "game_name": event.game_name,
             "event_type": event.event_type,
             "severity": event.severity,
             "summary": event.summary,
-            "reaction": reaction,
+            "reaction_jp": reaction_dict.get("jp", ""),
+            "reaction_en": reaction_dict.get("en", ""),
             "details": event.details,
         }
         self._msg_queue.put(payload)
 
-        # Trigger TTS
-        if self.enable_tts and reaction:
-            threading.Thread(target=self._tts._speak_sync, args=(reaction,), daemon=True).start()
+        # Trigger authentic Japanese neural speech
+        if self.enable_tts and reaction_dict.get("jp"):
+            def _async_speak():
+                loop = asyncio.new_event_loop()
+                asyncio.set_event_loop(loop)
+                loop.run_until_complete(self._tts.speak_japanese(reaction_dict["jp"]))
+                loop.close()
+
+            threading.Thread(target=_async_speak, daemon=True).start()
 
     def close(self) -> None:
         """Closes the overlay window."""

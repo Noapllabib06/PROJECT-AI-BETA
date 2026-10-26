@@ -398,13 +398,15 @@ _copilot_event_queues: List[asyncio.Queue] = []
 
 async def _copilot_bus_handler(event: GameEvent) -> None:
     """Dispatches GameEvent + Raphael Reaction to all connected SSE clients."""
-    reaction = await raphael_brain.generate_reaction(event)
+    reaction_dict = await raphael_brain.generate_reaction(event)
     payload = {
         "game_name": event.game_name,
         "event_type": event.event_type,
         "severity": event.severity,
         "summary": event.summary,
-        "reaction": reaction,
+        "reaction_jp": reaction_dict.get("jp", ""),
+        "reaction_en": reaction_dict.get("en", ""),
+        "reaction": reaction_dict.get("jp", ""),
         "details": event.details,
         "timestamp": event.timestamp,
     }
@@ -434,13 +436,15 @@ async def stream_game_copilot_events():
 
     async def event_generator():
         try:
-            # Send initial handshake
+            # Send initial handshake in bilingual format
             init_data = json.dumps({
                 "game_name": "Raphael Core",
                 "event_type": "SYNCHRONIZED",
                 "severity": "INFO",
                 "summary": "Raphael telemetry link established.",
-                "reaction": "<Notice. Telemetry channel linked. Standing by for Master's gameplay.>",
+                "reaction_jp": "<告。魂の回廊（ソウルリンク）は安定。戦況を常時観測中です、マスター。>",
+                "reaction_en": "<Notice. Soul corridor is stable. Actively monitoring field telemetry, Master.>",
+                "reaction": "<告。魂の回廊（ソウルリンク）は安定。戦況を常時観測中です、マスター。>",
                 "details": {}
             })
             yield f"data: {init_data}\n\n"
@@ -470,9 +474,15 @@ async def publish_game_copilot_event(event_data: Dict[str, Any] = Body(...)):
     """Manually publishes a game event and returns Raphael's reaction."""
     try:
         event = GameEvent(**event_data)
-        reaction = await raphael_brain.generate_reaction(event)
+        reaction_dict = await raphael_brain.generate_reaction(event)
         await event_bus.publish(event)
-        return {"status": "ok", "reaction": reaction, "event": event.model_dump()}
+        return {
+            "status": "ok",
+            "reaction_jp": reaction_dict.get("jp", ""),
+            "reaction_en": reaction_dict.get("en", ""),
+            "reaction": reaction_dict.get("jp", ""),
+            "event": event.model_dump(),
+        }
     except Exception as e:
         raise HTTPException(status_code=400, detail=str(e))
 

@@ -46,12 +46,15 @@ async def run_simulation(enable_overlay: bool = True, enable_voice: bool = True)
 
     # Bus subscriber to route events to HUD
     async def on_event(evt: GameEvent):
-        reaction = await brain.generate_reaction(evt)
+        reaction_dict = await brain.generate_reaction(evt)
+        jp_line = reaction_dict.get("jp", "")
+        en_sub = reaction_dict.get("en", "")
         print(f"\n[EVENT] Game: {evt.game_name} | Type: {evt.event_type} | Severity: {evt.severity}")
         print(f"  Summary : {evt.summary}")
-        print(f"  Raphael : {reaction}")
+        print(f"  Raphael (JP) : {jp_line}")
+        print(f"  Subtitle(EN) : {en_sub}")
         if overlay:
-            overlay.display_event(evt, reaction)
+            overlay.display_event(evt, reaction_dict)
 
     event_bus.subscribe(on_event)
 

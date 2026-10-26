@@ -6,7 +6,7 @@ from src.game_copilot.core.event_bus import EventBus, GameEvent
 from src.game_copilot.core.raphael_brain import RaphaelBrain
 from src.game_copilot.adapters.acc_adapter import ACCAdapter, format_ms_to_laptime
 from src.game_copilot.adapters.minecraft_adapter import MinecraftAdapter
-from src.game_copilot.ui.audio_tts import clean_text_for_speech
+from src.game_copilot.ui.audio_tts import clean_japanese_for_speech
 
 
 def test_event_bus_subscription_and_throttling():
@@ -69,9 +69,12 @@ def test_raphael_brain_instant_templates():
         }
     )
     reaction = brain._get_fallback_reaction(lap_evt)
-    assert reaction.startswith("<Notice.")
-    assert "Master" in reaction
-    assert "0.850s" in reaction
+    assert isinstance(reaction, dict)
+    assert reaction["jp"].startswith("<告。")
+    assert "マスター" in reaction["jp"]
+    assert "0.850秒" in reaction["jp"]
+    assert reaction["en"].startswith("<Notice.")
+    assert "Master" in reaction["en"]
 
     # Player death
     death_evt = GameEvent(
@@ -82,8 +85,9 @@ def test_raphael_brain_instant_templates():
         details={"cause": "Creeper explosion"}
     )
     death_reaction = brain._get_fallback_reaction(death_evt)
-    assert death_reaction.startswith("<Warning.")
-    assert "Creeper explosion" in death_reaction
+    assert death_reaction["jp"].startswith("<警告。")
+    assert "Creeper explosion" in death_reaction["jp"]
+    assert death_reaction["en"].startswith("<Warning.")
 
 
 def test_acc_lap_formatting_and_telemetry():
@@ -146,9 +150,10 @@ def test_minecraft_log_parsing():
 
 
 def test_audio_tts_text_cleaner():
-    raw = "<Notice. Lap 2 completed in 1:47.320 (+0.450s). Well done, Master.>"
-    cleaned = clean_text_for_speech(raw)
+    raw_jp = "<告。個体名『スティーブ』の能力拡張を確認。マスター。>"
+    cleaned = clean_japanese_for_speech(raw_jp)
     assert "<" not in cleaned
     assert ">" not in cleaned
-    assert "1 minute 47 point 320 seconds" in cleaned
-    assert "plus 0.450 seconds" in cleaned
+    assert "『" not in cleaned
+    assert "』" not in cleaned
+    assert cleaned.startswith("告、")
