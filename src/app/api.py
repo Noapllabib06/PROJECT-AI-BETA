@@ -13,12 +13,14 @@ import httpx
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect, HTTPException, Body
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
-from fastapi.responses import FileResponse, JSONResponse
+from fastapi.responses import FileResponse, JSONResponse, StreamingResponse
 from pydantic import BaseModel, Field
 
 from config.settings import settings, get_logger
 from src.agents.base_agent import ToolCall
 from src.workflows.orchestrator import orchestrator, JarvisOrchestrator
+from src.game_copilot.core.event_bus import event_bus, GameEvent
+from src.game_copilot.core.raphael_brain import RaphaelBrain
 
 logger = get_logger("API")
 
@@ -387,6 +389,92 @@ async def websocket_chat_endpoint(websocket: WebSocket):
         if current_task and not current_task.done():
             current_task.cancel()
         active_chat_tasks.pop(session_id, None)
+
+
+# ==================== RAPHAEL GAMING COPILOT ====================
+
+raphael_brain = RaphaelBrain()
+_copilot_event_queues: List[asyncio.Queue] = []
+
+async def _copilot_bus_handler(event: GameEvent) -> None:
+    """Dispatches GameEvent + Raphael Reaction to all connected SSE clients."""
+    reaction = await raphael_brain.generate_reaction(event)
+    payload = {
+        "game_name": event.game_name,
+        "event_type": event.event_type,
+        "severity": event.severity,
+        "summary": event.summary,
+        "reaction": reaction,
+        "details": event.details,
+        "timestamp": event.timestamp,
+    }
+    for q in list(_copilot_event_queues):
+        try:
+            await q.put(payload)
+        except Exception:
+            pass
+
+event_bus.subscribe(_copilot_bus_handler)
+
+
+@app.get("/api/game_copilot/overlay")
+async def get_game_copilot_overlay():
+    """Serves the Tensura Raphael HTML5 HUD overlay."""
+    hud_file = Path(__file__).resolve().parent.parent / "game_copilot" / "ui" / "static" / "raphael_hud.html"
+    if hud_file.is_file():
+        return FileResponse(str(hud_file), headers=NO_CACHE_HEADERS)
+    raise HTTPException(status_code=404, detail="Raphael HUD overlay file not found")
+
+
+@app.get("/api/game_copilot/stream")
+async def stream_game_copilot_events():
+    """Server-Sent Events (SSE) feed delivering live telemetry reactions to HUD overlay."""
+    q = asyncio.Queue()
+    _copilot_event_queues.append(q)
+
+    async def event_generator():
+        try:
+            # Send initial handshake
+            init_data = json.dumps({
+                "game_name": "Raphael Core",
+                "event_type": "SYNCHRONIZED",
+                "severity": "INFO",
+                "summary": "Raphael telemetry link established.",
+                "reaction": "<Notice. Telemetry channel linked. Standing by for Master's gameplay.>",
+                "details": {}
+            })
+            yield f"data: {init_data}\n\n"
+
+            while True:
+                data = await q.get()
+                yield f"data: {json.dumps(data)}\n\n"
+        except asyncio.CancelledError:
+            pass
+        finally:
+            if q in _copilot_event_queues:
+                _copilot_event_queues.remove(q)
+
+    return StreamingResponse(
+        event_generator(),
+        media_type="text/event-stream",
+        headers={
+            "Cache-Control": "no-cache",
+            "Connection": "keep-alive",
+            "X-Accel-Buffering": "no",
+        }
+    )
+
+
+@app.post("/api/game_copilot/event")
+async def publish_game_copilot_event(event_data: Dict[str, Any] = Body(...)):
+    """Manually publishes a game event and returns Raphael's reaction."""
+    try:
+        event = GameEvent(**event_data)
+        reaction = await raphael_brain.generate_reaction(event)
+        await event_bus.publish(event)
+        return {"status": "ok", "reaction": reaction, "event": event.model_dump()}
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=str(e))
 
 
 # ==================== STATIC GUI MOUNT ====================

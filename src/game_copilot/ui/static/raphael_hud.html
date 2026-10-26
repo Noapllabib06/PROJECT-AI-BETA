@@ -1,0 +1,388 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Raphael AI - Wisdom Lord Gaming HUD</title>
+  <style>
+    :root {
+      --bg-glass: rgba(10, 14, 26, 0.85);
+      --border-cyan: #00f0ff;
+      --glow-cyan: rgba(0, 240, 255, 0.5);
+      --accent-gold: #ffd166;
+      --glow-gold: rgba(255, 209, 102, 0.4);
+      --danger-crimson: #ff2a6d;
+      --text-main: #e0f2fe;
+      --text-dim: #7dd3fc;
+    }
+
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+      user-select: none;
+    }
+
+    body {
+      background: transparent;
+      font-family: 'Rajdhani', 'Segoe UI', system-ui, sans-serif;
+      color: var(--text-main);
+      overflow: hidden;
+      width: 100vw;
+      height: 100vh;
+      display: flex;
+      flex-direction: column;
+      justify-content: flex-start;
+      align-items: flex-start;
+      padding: 24px;
+    }
+
+    /* Floating HUD Container at Top-Left */
+    .raphael-hud {
+      position: relative;
+      width: 440px;
+      background: var(--bg-glass);
+      backdrop-filter: blur(12px);
+      -webkit-backdrop-filter: blur(12px);
+      border: 1px solid var(--border-cyan);
+      box-shadow: 0 0 25px var(--glow-cyan), inset 0 0 15px rgba(0, 240, 255, 0.15);
+      border-radius: 12px;
+      padding: 16px 20px;
+      transition: all 0.4s cubic-bezier(0.16, 1, 0.3, 1);
+      opacity: 0.95;
+    }
+
+    .raphael-hud.warning {
+      border-color: var(--danger-crimson);
+      box-shadow: 0 0 25px rgba(255, 42, 109, 0.6), inset 0 0 15px rgba(255, 42, 109, 0.2);
+    }
+
+    .raphael-hud.celebration {
+      border-color: var(--accent-gold);
+      box-shadow: 0 0 25px var(--glow-gold), inset 0 0 15px rgba(255, 209, 102, 0.25);
+    }
+
+    /* Header Bar */
+    .hud-header {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      border-bottom: 1px solid rgba(0, 240, 255, 0.2);
+      padding-bottom: 10px;
+      margin-bottom: 12px;
+    }
+
+    /* Tensura Magic Rune Circle */
+    .rune-container {
+      position: relative;
+      width: 44px;
+      height: 44px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+
+    .rune-svg {
+      width: 100%;
+      height: 100%;
+      animation: rotateRune 12s linear infinite;
+      transform-origin: center;
+    }
+
+    .rune-inner {
+      position: absolute;
+      width: 22px;
+      height: 22px;
+      border-radius: 50%;
+      background: radial-gradient(circle, #00f0ff 10%, rgba(0, 240, 255, 0.2) 70%, transparent);
+      animation: pulseRune 2s ease-in-out infinite;
+    }
+
+    @keyframes rotateRune {
+      from { transform: rotate(0deg); }
+      to { transform: rotate(360deg); }
+    }
+
+    @keyframes pulseRune {
+      0%, 100% { transform: scale(0.85); opacity: 0.7; }
+      50% { transform: scale(1.15); opacity: 1; filter: drop-shadow(0 0 8px #00f0ff); }
+    }
+
+    /* Title & Game Indicator */
+    .title-block {
+      flex: 1;
+    }
+
+    .hud-title {
+      font-size: 16px;
+      font-weight: 700;
+      letter-spacing: 1.5px;
+      text-transform: uppercase;
+      color: #fff;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .hud-title span.kanji {
+      font-size: 13px;
+      color: var(--accent-gold);
+      letter-spacing: 2px;
+    }
+
+    .game-status {
+      font-size: 11px;
+      letter-spacing: 0.8px;
+      color: var(--text-dim);
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      margin-top: 2px;
+    }
+
+    .status-dot {
+      width: 6px;
+      height: 6px;
+      background: #00ff88;
+      border-radius: 50%;
+      box-shadow: 0 0 6px #00ff88;
+      animation: blink 1.5s ease-in-out infinite;
+    }
+
+    @keyframes blink {
+      0%, 100% { opacity: 0.4; }
+      50% { opacity: 1; }
+    }
+
+    /* Message Body */
+    .message-box {
+      min-height: 54px;
+      display: flex;
+      flex-direction: column;
+      justify-content: center;
+    }
+
+    .event-badge {
+      display: inline-block;
+      font-size: 10px;
+      font-weight: 700;
+      letter-spacing: 1px;
+      padding: 2px 8px;
+      border-radius: 4px;
+      background: rgba(0, 240, 255, 0.15);
+      color: var(--border-cyan);
+      margin-bottom: 6px;
+      width: fit-content;
+      text-transform: uppercase;
+    }
+
+    .speech-bubble {
+      font-size: 14.5px;
+      line-height: 1.45;
+      font-weight: 500;
+      color: #ffffff;
+      text-shadow: 0 0 6px rgba(0, 240, 255, 0.4);
+    }
+
+    .speech-bubble .notice-tag {
+      color: var(--accent-gold);
+      font-weight: 700;
+    }
+
+    /* Audio Waves Animation */
+    .audio-waves {
+      display: flex;
+      align-items: center;
+      gap: 3px;
+      height: 14px;
+      margin-left: auto;
+    }
+
+    .bar {
+      width: 2px;
+      height: 100%;
+      background: var(--border-cyan);
+      border-radius: 1px;
+      animation: wave 1s ease-in-out infinite;
+    }
+    .bar:nth-child(2) { animation-delay: 0.15s; }
+    .bar:nth-child(3) { animation-delay: 0.3s; }
+    .bar:nth-child(4) { animation-delay: 0.45s; }
+
+    @keyframes wave {
+      0%, 100% { height: 3px; }
+      50% { height: 14px; }
+    }
+
+    /* Telemetry Details Strip */
+    .telemetry-strip {
+      margin-top: 10px;
+      padding-top: 8px;
+      border-top: 1px dashed rgba(0, 240, 255, 0.15);
+      display: flex;
+      justify-content: space-between;
+      font-size: 11px;
+      color: var(--text-dim);
+      font-family: monospace;
+    }
+  </style>
+</head>
+<body>
+
+  <div id="raphaelHud" class="raphael-hud">
+    <!-- Header -->
+    <div class="hud-header">
+      <div class="rune-container">
+        <!-- Tensura Magic Circle SVG -->
+        <svg class="rune-svg" viewBox="0 0 100 100" fill="none" xmlns="http://www.w3.org/2000/svg">
+          <circle cx="50" cy="50" r="46" stroke="#00f0ff" stroke-width="1.5" stroke-dasharray="8 4"/>
+          <circle cx="50" cy="50" r="38" stroke="#ffd166" stroke-width="1" stroke-dasharray="3 3"/>
+          <polygon points="50,14 81,68 19,68" stroke="#00f0ff" stroke-width="1.2" opacity="0.8"/>
+          <polygon points="50,86 19,32 81,32" stroke="#00f0ff" stroke-width="1.2" opacity="0.8"/>
+          <circle cx="50" cy="50" r="26" stroke="#00f0ff" stroke-width="1"/>
+        </svg>
+        <div class="rune-inner"></div>
+      </div>
+
+      <div class="title-block">
+        <div class="hud-title">
+          <span>Raphael</span>
+          <span class="kanji">« 智恵之王 »</span>
+        </div>
+        <div class="game-status">
+          <div class="status-dot"></div>
+          <span id="gameNameText">SYNCHRONIZED • STANDBY</span>
+        </div>
+      </div>
+
+      <div class="audio-waves" id="audioWaves" style="opacity: 0.5;">
+        <div class="bar"></div>
+        <div class="bar"></div>
+        <div class="bar"></div>
+        <div class="bar"></div>
+      </div>
+    </div>
+
+    <!-- Message Body -->
+    <div class="message-box">
+      <div id="eventBadge" class="event-badge">SYSTEM INITIALIZED</div>
+      <div id="speechText" class="speech-bubble">
+        <span class="notice-tag">&lt;Notice.</span> Lord of Wisdom Raphael is active. Monitoring soul and telemetry channels, Master.&gt;
+      </div>
+    </div>
+
+    <!-- Telemetry Strip -->
+    <div id="telemetryStrip" class="telemetry-strip" style="display: none;">
+      <span id="telemetryDetail1">TIME: --:--.---</span>
+      <span id="telemetryDetail2">DELTA: +0.000s</span>
+      <span id="telemetryDetail3">STATUS: OPTIMAL</span>
+    </div>
+  </div>
+
+  <script>
+    // Web Audio Synthesizer for Tensura Ethereal Chime Sound Effect
+    function playRaphaelChime() {
+      try {
+        const AudioCtx = window.AudioContext || window.webkitAudioContext;
+        const ctx = new AudioCtx();
+        const now = ctx.currentTime;
+
+        // Harmonic Chime Frequencies (Raphael's Voice of the World notification tone)
+        const freqs = [880, 1320, 1760];
+        freqs.forEach((freq, idx) => {
+          const osc = ctx.createOscillator();
+          const gain = ctx.createGain();
+          osc.type = 'sine';
+          osc.frequency.setValueAtTime(freq, now + idx * 0.08);
+
+          gain.gain.setValueAtTime(0.08, now + idx * 0.08);
+          gain.gain.exponentialRampToValueAtTime(0.0001, now + idx * 0.08 + 0.6);
+
+          osc.connect(gain);
+          gain.connect(ctx.destination);
+
+          osc.start(now + idx * 0.08);
+          osc.stop(now + idx * 0.08 + 0.65);
+        });
+      } catch (e) {
+        console.warn("Audio chime prevented by browser autoplay policy:", e);
+      }
+    }
+
+    // Function called to display new reactive feedback from Raphael
+    window.updateRaphaelHUD = function(payload) {
+      const hud = document.getElementById('raphaelHud');
+      const gameText = document.getElementById('gameNameText');
+      const badge = document.getElementById('eventBadge');
+      const speech = document.getElementById('speechText');
+      const strip = document.getElementById('telemetryStrip');
+      const waves = document.getElementById('audioWaves');
+
+      // Update styling based on severity
+      hud.className = 'raphael-hud';
+      if (payload.severity === 'CRITICAL' || payload.severity === 'WARNING') {
+        hud.classList.add('warning');
+      } else if (payload.severity === 'CELEBRATION') {
+        hud.classList.add('celebration');
+      }
+
+      // Update contents
+      gameText.innerText = (payload.game_name || "SYSTEM").toUpperCase() + " • ACTIVE";
+      badge.innerText = payload.event_type || "TELEMETRY";
+
+      // Formatted text
+      let text = payload.reaction || payload.summary || "";
+      text = text.replace(/<Notice\./gi, '<span class="notice-tag">&lt;Notice.</span>')
+                 .replace(/<Report\./gi, '<span class="notice-tag">&lt;Report.</span>')
+                 .replace(/<Warning\./gi, '<span class="notice-tag" style="color:#ff2a6d">&lt;Warning.</span>');
+      speech.innerHTML = text;
+
+      // Telemetry strip
+      if (payload.details && Object.keys(payload.details).length > 0) {
+        strip.style.display = 'flex';
+        const d = payload.details;
+        if (d.lap_time_str) {
+          document.getElementById('telemetryDetail1').innerText = "LAP: " + d.lap_time_str;
+          document.getElementById('telemetryDetail2').innerText = "DELTA: " + (d.delta_prev_lap >= 0 ? "+" : "") + Number(d.delta_prev_lap || 0).toFixed(3) + "s";
+          document.getElementById('telemetryDetail3').innerText = d.is_personal_best ? "BEST LAP" : "P" + (d.position || 1);
+        } else if (d.cause) {
+          document.getElementById('telemetryDetail1').innerText = "STATUS: CASUALTY";
+          document.getElementById('telemetryDetail2').innerText = "CAUSE: " + d.cause.toUpperCase();
+          document.getElementById('telemetryDetail3').innerText = "RESPAWNING...";
+        } else if (d.achievement) {
+          document.getElementById('telemetryDetail1').innerText = "UNLOCK: ADVANCEMENT";
+          document.getElementById('telemetryDetail2').innerText = d.achievement.toUpperCase();
+          document.getElementById('telemetryDetail3').innerText = "REWARD: GRANTED";
+        }
+      }
+
+      // Play sound chime & activate wave animation
+      playRaphaelChime();
+      waves.style.opacity = '1';
+      setTimeout(() => { waves.style.opacity = '0.5'; }, 2500);
+    };
+
+    // Live Server-Sent Events (SSE) or WebSocket connection to JARVIS backend
+    function connectEventStream() {
+      try {
+        const evtSource = new EventSource("/api/game_copilot/stream");
+        evtSource.onmessage = function(e) {
+          try {
+            const data = JSON.parse(e.data);
+            window.updateRaphaelHUD(data);
+          } catch (err) {
+            console.error("Error parsing event stream:", err);
+          }
+        };
+        evtSource.onerror = function() {
+          // Reconnect in 3s
+          setTimeout(connectEventStream, 3000);
+        };
+      } catch (e) {
+        console.warn("EventSource stream not yet active:", e);
+      }
+    }
+    connectEventStream();
+  </script>
+</body>
+</html>
