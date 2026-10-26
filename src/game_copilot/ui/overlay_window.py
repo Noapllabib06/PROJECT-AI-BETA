@@ -218,7 +218,7 @@ class RaphaelDesktopOverlay:
         # Escape key closes overlay
         self.root.bind("<Escape>", lambda e: self._handle_user_exit())
 
-        # ==================== WIN32 ABSOLUTE TOPMOST ENFORCEMENT ====================
+        # ==================== WIN32 NO-INTERFERENCE TOPMOST SETUP ====================
         if sys.platform == "win32":
             import ctypes
 
@@ -227,48 +227,41 @@ class RaphaelDesktopOverlay:
             SWP_NOMOVE = 0x0002
             SWP_NOACTIVATE = 0x0010
             SWP_SHOWWINDOW = 0x0040
-            TOPMOST_FLAGS = SWP_NOSIZE | SWP_NOMOVE | SWP_NOACTIVATE | SWP_SHOWWINDOW  # 0x0053
+            TOPMOST_FLAGS = SWP_NOSIZE | SWP_NOMOVE | SWP_NOACTIVATE | SWP_SHOWWINDOW
 
             GWL_EXSTYLE = -20
             WS_EX_TOPMOST = 0x00000008
             WS_EX_TOOLWINDOW = 0x00000080
+            WS_EX_NOACTIVATE = 0x08000000  # Crucial: NEVER steal focus from ACC/game controls
 
-            def _get_root_hwnd():
-                if not self.root:
-                    return None
-                try:
-                    child = self.root.winfo_id()
-                    root_hw = ctypes.windll.user32.GetAncestor(child, 3)  # GA_ROOTOWNER
-                    return root_hw if root_hw else child
-                except Exception:
-                    return None
-
-            try:
-                root_hwnd = _get_root_hwnd()
-                if root_hwnd:
-                    ex_style = ctypes.windll.user32.GetWindowLongW(root_hwnd, GWL_EXSTYLE)
-                    ctypes.windll.user32.SetWindowLongW(root_hwnd, GWL_EXSTYLE, ex_style | WS_EX_TOPMOST | WS_EX_TOOLWINDOW)
-            except Exception:
-                pass
-
-            def _enforce_win32_topmost():
+            def _init_win32_overlay():
                 if not self.root:
                     return
                 try:
-                    root_hwnd = _get_root_hwnd()
-                    if root_hwnd:
-                        ctypes.windll.user32.SetWindowPos(
-                            root_hwnd,
-                            HWND_TOPMOST,
-                            0, 0, 0, 0,
-                            TOPMOST_FLAGS
-                        )
-                except Exception:
-                    pass
-                if self.root:
-                    self.root.after(400, _enforce_win32_topmost)
+                    child = self.root.winfo_id()
+                    root_hw = ctypes.windll.user32.GetAncestor(child, 3)  # GA_ROOTOWNER
+                    target_hwnd = root_hw if root_hw else child
 
-            self.root.after(200, _enforce_win32_topmost)
+                    # Set styles ONCE: non-activating, tool window, topmost
+                    ex_style = ctypes.windll.user32.GetWindowLongW(target_hwnd, GWL_EXSTYLE)
+                    ctypes.windll.user32.SetWindowLongW(
+                        target_hwnd,
+                        GWL_EXSTYLE,
+                        ex_style | WS_EX_TOPMOST | WS_EX_TOOLWINDOW | WS_EX_NOACTIVATE
+                    )
+
+                    # Position in topmost band ONCE without activating or racing with game
+                    ctypes.windll.user32.SetWindowPos(
+                        target_hwnd,
+                        HWND_TOPMOST,
+                        0, 0, 0, 0,
+                        TOPMOST_FLAGS
+                    )
+                except Exception as e:
+                    logger.debug(f"Win32 styles setup: {e}")
+
+            # Apply once on startup - NO repetitive polling loop to prevent game control overrides
+            self.root.after(150, _init_win32_overlay)
 
         # Periodic queue checker
         self.root.after(100, self._process_queue)
@@ -388,11 +381,21 @@ class RaphaelDesktopOverlay:
             threading.Thread(target=_async_speak, daemon=True).start()
 
     def close(self) -> None:
-        """Closes the overlay window."""
+        """Closes the overlay window cleanly without thread corruption."""
         self._running = False
         if self.root:
             try:
-                self.root.quit()
+                self.root.after(0, self._destroy_ui)
+            except Exception:
+                try:
+                    self.root.destroy()
+                except Exception:
+                    pass
+                self.root = None
+
+    def _destroy_ui(self) -> None:
+        if self.root:
+            try:
                 self.root.destroy()
             except Exception:
                 pass
