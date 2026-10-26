@@ -25,7 +25,8 @@ class RaphaelBrain:
 
     def __init__(self, model_name: Optional[str] = None, ollama_url: Optional[str] = None):
         self.ollama_url = ollama_url or settings.llm.ollama_base_url
-        self.model_name = model_name or settings.llm.default_model
+        # Explicitly default to 1.5B (takes only ~980MB VRAM, preventing game crashes)
+        self.model_name = model_name or "qwen2.5:1.5b"
         self.timeout_sec = 2.0
 
     def _get_fallback_reaction(self, event: GameEvent) -> Dict[str, str]:

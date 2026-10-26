@@ -1,14 +1,16 @@
 """Assetto Corsa Competizione (ACC) Telemetry Adapter.
 
 Reads Windows Shared Memory (Local\\acpmf_graphics) natively with 0% CPU/GPU overhead.
-Requires zero game configuration or mods from the user.
+Uses OpenFileMappingW to ensure Python NEVER pre-creates or locks the mapping before ACC,
+completely preventing EXCEPTION_ACCESS_VIOLATION in AC2-Win64-Shipping.exe.
 """
 
 import sys
-import mmap
 import struct
 import asyncio
-from typing import Optional, Dict, Any, Tuple
+import ctypes
+from ctypes import wintypes
+from typing import Optional, Dict, Any
 from config.settings import get_logger
 from src.game_copilot.adapters.base_adapter import BaseGameAdapter
 from src.game_copilot.core.event_bus import GameEvent, EventBus
@@ -16,7 +18,27 @@ from src.game_copilot.core.event_bus import GameEvent, EventBus
 logger = get_logger("ACCAdapter")
 
 GRAPHICS_TAG = "Local\\acpmf_graphics"
-GRAPHICS_SIZE = 1588  # Approximate size of ACC graphics shared memory buffer
+FILE_MAP_READ = 0x0004
+GRAPHICS_SIZE = 1588
+
+# Setup Win32 Kernel32 prototypes
+if sys.platform == "win32":
+    kernel32 = ctypes.windll.kernel32
+    OpenFileMappingW = kernel32.OpenFileMappingW
+    OpenFileMappingW.argtypes = [wintypes.DWORD, wintypes.BOOL, wintypes.LPCWSTR]
+    OpenFileMappingW.restype = wintypes.HANDLE
+
+    MapViewOfFile = kernel32.MapViewOfFile
+    MapViewOfFile.argtypes = [wintypes.HANDLE, wintypes.DWORD, wintypes.DWORD, wintypes.DWORD, ctypes.c_size_t]
+    MapViewOfFile.restype = ctypes.c_void_p
+
+    UnmapViewOfFile = kernel32.UnmapViewOfFile
+    UnmapViewOfFile.argtypes = [ctypes.c_void_p]
+    UnmapViewOfFile.restype = wintypes.BOOL
+
+    CloseHandle = kernel32.CloseHandle
+    CloseHandle.argtypes = [wintypes.HANDLE]
+    CloseHandle.restype = wintypes.BOOL
 
 
 def format_ms_to_laptime(ms: int) -> str:
@@ -35,47 +57,72 @@ class ACCAdapter(BaseGameAdapter):
     def __init__(self, bus: Optional[EventBus] = None, poll_interval_sec: float = 0.1):
         super().__init__(game_name="Assetto Corsa Competizione", bus=bus)
         self.poll_interval = poll_interval_sec
-        self._mmap: Optional[mmap.mmap] = None
+        self._h_map: Optional[int] = None
+        self._p_buf: Optional[int] = None
         self._last_completed_laps: int = 0
         self._previous_lap_time_ms: Optional[int] = None
         self._best_lap_time_ms: Optional[int] = None
-        self._session_active: bool = False
+        self._connected: bool = False
 
     def _open_shared_memory(self) -> bool:
-        """Attempts to attach to Windows named shared memory mapping."""
+        """Attaches ONLY to an existing mapping created by ACC. Never creates or locks the name."""
         if sys.platform != "win32":
             return False
 
         try:
-            # On Windows, negative fd (-1) opens named shared memory
-            self._mmap = mmap.mmap(-1, GRAPHICS_SIZE, tagname=GRAPHICS_TAG, access=mmap.ACCESS_READ)
-            logger.info("Successfully connected to ACC Shared Memory (Local\\acpmf_graphics).")
+            # OpenFileMappingW fails (returns 0/NULL) if ACC is not running.
+            # This is critical: it guarantees Python NEVER creates the mapping before ACC!
+            h_map = OpenFileMappingW(FILE_MAP_READ, False, GRAPHICS_TAG)
+            if not h_map:
+                return False
+
+            p_buf = MapViewOfFile(h_map, FILE_MAP_READ, 0, 0, GRAPHICS_SIZE)
+            if not p_buf:
+                CloseHandle(h_map)
+                return False
+
+            self._h_map = h_map
+            self._p_buf = p_buf
+            if not self._connected:
+                self._connected = True
+                logger.info("ACC process detected. Successfully attached to Local\\acpmf_graphics.")
             return True
-        except FileNotFoundError:
-            # Game is not currently running
-            return False
         except Exception as e:
-            logger.debug(f"ACC Shared memory not available yet: {e}")
+            logger.debug(f"ACC Shared memory check: {e}")
+            self._close_handles()
             return False
 
+    def _close_handles(self) -> None:
+        """Releases memory view and handle cleanly."""
+        if sys.platform == "win32":
+            if self._p_buf:
+                try:
+                    UnmapViewOfFile(self._p_buf)
+                except Exception:
+                    pass
+                self._p_buf = None
+            if self._h_map:
+                try:
+                    CloseHandle(self._h_map)
+                except Exception:
+                    pass
+                self._h_map = None
+        self._connected = False
+
     def _read_telemetry(self) -> Optional[Dict[str, Any]]:
-        """Parses the current graphics buffer from shared memory."""
-        if not self._mmap:
+        """Parses the current graphics buffer from shared memory safely."""
+        if not self._p_buf:
             if not self._open_shared_memory():
                 return None
 
         try:
-            self._mmap.seek(0)
-            data = self._mmap.read(160)
-            if len(data) < 152:
+            # Read 160 bytes from the mapped memory address
+            raw_bytes = ctypes.string_at(self._p_buf, 160)
+            if len(raw_bytes) < 152:
                 return None
 
-            # Unpack initial header:
-            # packetId (i), status (i), session (i)
-            # currentTime (30s), lastTime (30s), bestTime (30s), split (30s)
-            # completedLaps (i), position (i), iCurrentTime (i), iLastTime (i), iBestTime (i)
             header_format = "=iii30s30s30s30siiiii"
-            unpacked = struct.unpack_from(header_format, data, 0)
+            unpacked = struct.unpack_from(header_format, raw_bytes, 0)
 
             packet_id = unpacked[0]
             status = unpacked[1]  # 0: OFF, 1: REPLAY, 2: LIVE, 3: PAUSE
@@ -97,8 +144,8 @@ class ACCAdapter(BaseGameAdapter):
                 "best_time_ms": i_best_time,
             }
         except Exception as e:
-            logger.debug(f"Error reading ACC shared memory: {e}")
-            self._mmap = None
+            logger.debug(f"Error reading ACC buffer: {e}")
+            self._close_handles()
             return None
 
     def process_telemetry_state(self, telemetry: Dict[str, Any]) -> Optional[GameEvent]:
@@ -113,14 +160,7 @@ class ACCAdapter(BaseGameAdapter):
         if status != 2 and status != 0:
             pass
 
-        # First time detecting laps
-        if self._last_completed_laps == -1:
-            self._last_completed_laps = completed_laps
-            self._previous_lap_time_ms = last_time_ms if last_time_ms > 0 else None
-            self._best_lap_time_ms = best_time_ms if best_time_ms > 0 else None
-            return None
-
-        # Lap completion detection!
+        # Lap completion detection
         if completed_laps > self._last_completed_laps and last_time_ms > 0:
             lap_number = completed_laps
             lap_time_str = format_ms_to_laptime(last_time_ms)
@@ -141,7 +181,6 @@ class ACCAdapter(BaseGameAdapter):
             self._previous_lap_time_ms = last_time_ms
             self._last_completed_laps = completed_laps
 
-            # Determine severity and summary
             if is_personal_best:
                 severity = "CELEBRATION"
                 summary = f"Lap {lap_number} completed: {lap_time_str} (NEW PERSONAL BEST! Delta: {delta_prev:+.3f}s, P{position})"
@@ -179,3 +218,8 @@ class ACCAdapter(BaseGameAdapter):
             if event:
                 await self.event_bus.publish(event)
         await asyncio.sleep(self.poll_interval)
+
+    async def stop(self) -> None:
+        """Stops adapter and releases Win32 handles."""
+        await super().stop()
+        self._close_handles()

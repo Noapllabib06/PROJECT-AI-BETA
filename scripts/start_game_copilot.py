@@ -27,8 +27,20 @@ from src.game_copilot.ui.overlay_window import RaphaelDesktopOverlay
 logger = get_logger("GameCopilotRunner")
 
 
-async def main_async(enable_acc: bool = True, enable_mc: bool = True, enable_voice: bool = True, enable_overlay: bool = True):
-    acc_status = "ACTIVE (Listening to Local\\acpmf_graphics)" if enable_acc else "DISABLED"
+def unload_heavy_models():
+    """Immediately unloads heavy 7B models from GPU VRAM to ensure 100% memory is free for the game."""
+    try:
+        import httpx
+        with httpx.Client(timeout=1.5) as client:
+            client.post("http://localhost:11434/api/generate", json={"model": "qwen2.5:7b", "keep_alive": 0})
+    except Exception:
+        pass
+
+
+async def main_async(enable_acc: bool = True, enable_mc: bool = True, enable_voice: bool = True, enable_overlay: bool = True, model_name: str = "qwen2.5:1.5b"):
+    unload_heavy_models()
+
+    acc_status = "ACTIVE (Waiting for ACC to start...)" if enable_acc else "DISABLED"
     mc_status = "ACTIVE (Streaming .minecraft/logs/latest.log)" if enable_mc else "DISABLED"
     overlay_status = "ENABLED (Top-Left)" if enable_overlay else "DISABLED"
     voice_status = "ENABLED (Tensura Japanese Neural Voice)" if enable_voice else "DISABLED"
@@ -36,6 +48,7 @@ async def main_async(enable_acc: bool = True, enable_mc: bool = True, enable_voi
     print("=" * 68)
     print("   « 智恵之王 » RAPHAEL AI GAMING COPILOT - LIVE ACTIVE SYSTEM")
     print("=" * 68)
+    print(f"[*] Active LLM Model: {model_name} (Lightweight ~980MB, Zero Game Lag)")
     print(f"[*] Visual Overlay : {overlay_status}")
     print(f"[*] Voice Engine   : {voice_status}")
     print(f"[*] ACC Telemetry  : {acc_status}")
