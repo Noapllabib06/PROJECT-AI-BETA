@@ -71,10 +71,8 @@ def test_raphael_brain_instant_templates():
     reaction = brain._get_fallback_reaction(lap_evt)
     assert isinstance(reaction, dict)
     assert reaction["jp"].startswith(("<告。", "<解。"))
-    assert "マスター" in reaction["jp"]
     assert "01:48.320" in reaction["jp"]
     assert reaction["en"].startswith("<Notice.")
-    assert "Master" in reaction["en"]
 
     # Player death
     death_evt = GameEvent(

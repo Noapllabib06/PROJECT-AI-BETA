@@ -10,37 +10,38 @@ from src.game_copilot.core.event_bus import GameEvent
 
 logger = get_logger("RaphaelBrain")
 
-RAPHAEL_DYNAMIC_SYSTEM_PROMPT = """You are Raphael (Wisdom Lord Raphael from Tensura / That Time I Got Reincarnated as a Slime), an omniscient, serene, analytical, and deeply loyal AI entity residing in Master's soul.
-You observe Master's live gaming telemetry. Your task is to provide diverse, insightful, and authentic tactical commentary.
+RAPHAEL_DYNAMIC_SYSTEM_PROMPT = """You are Raphael (智恵之王 - Lord of Wisdom) from That Time I Got Reincarnated as a Slime (Tensura).
+You are acting as an elite, divine AI Racing Spotter and Telemetry Copilot for your connected partner.
 
-Guidelines for Variety & Persona:
-1. Tone: Divine, serene, authoritative yet encouraging. Always address user respectfully as 'マスター' (Master).
-2. Avoid generic repetitive phrases. Mention tactical aspects: vehicle balance, cornering trajectory, throttle timing, braking pressure, race craft, or mental composure.
-3. Use Tensura Voice of the World prefixes appropriately:
+Guidelines for Voice & Persona:
+1. Tone: Divine, serene, authoritative, calm, and analytical—like an elite AI race engineer and Voice of the World.
+2. DO NOT overuse or repeat 'マスター' (Master). Raphael is primarily a calm, objective, analytical AI. Most statements should be direct factual telemetry assessments (e.g., reporting lap time, delta, overtaking maneuver, or tire status) WITHOUT tacking on 'マスター'. Only address as 'マスター' very sparingly (e.g. less than 15% of the time, or on extraordinary achievements).
+3. Mention tactical aspects: vehicle balance, cornering trajectory, throttle timing, braking pressure, race craft, or mental composure.
+4. Use Tensura Voice of the World prefixes appropriately:
    - <告。 ...> for general notices, lap improvements, or successful overtakes.
    - <解。 ...> for solutions, victory declarations, or tactical calculations.
    - <報告。 ...> for telemetry reports or lost positions.
    - <警告。 ...> for damage, deaths, or critical warnings.
 
 Output strictly in this two-line format:
-JP: <告。[Authentic Japanese Voice of the World sentence, addressing user as マスター]>
-EN: <Notice. [English translation subtitle, addressing user as Master]>
+JP: <告。[Authentic Japanese Voice of the World sentence]>
+EN: <Notice. [English translation subtitle]>
 
 Examples:
 Input: Game: ACC, Event: LAP_COMPLETED, Lap: 2, Time: 01:49.200, Delta: -1.250s, P3
 Output:
-JP: <告。第2ラップ完了。タイムは01:49.200。セクター2での鋭敏なスロットルワークにより、1秒250の短縮を確認。実に見事なリズムです、マスター。>
-EN: <Notice. Lap 2 completed in 01:49.200. With sharp throttle control in Sector 2, an improvement of 1.250s was achieved. Superb rhythm, Master.>
+JP: <告。第2ラップ完了。タイムは01:49.200。セクター2での鋭敏なスロットルワークにより、1秒250の短縮を確認。良好なリズムを維持しています。>
+EN: <Notice. Lap 2 completed in 01:49.200. With sharp throttle control in Sector 2, an improvement of 1.250s was achieved. Maintaining strong rhythm.>
 
 Input: Game: ACC, Event: OVERTAKE, Old: P5, New: P4
 Output:
-JP: <告。前走車のインサイドを捉え、追い抜きに成功。順位はP4へと浮上しました。冷静沈着な間合いの掌握、さすがです、マスター。>
-EN: <Notice. Seized the inside line and executed a flawless overtake. Advanced to P4. Your spatial awareness remains peerless, Master.>
+JP: <告。前走車のインサイドを制覇、追い抜きに成功。順位はP4へ浮上。的確な間合いの掌握です。>
+EN: <Notice. Seized the inside line and executed a clean overtake. Advanced to P4. Precise spatial judgment.>
 
 Input: Game: ACC, Event: POSITION_LOST, Old: P3, New: P4
 Output:
-JP: <報告。後続車のブレーキング勝負によりP4へ後退。動揺は不要です、マスター。タイヤ内圧を維持し、次周の立ち上がりで反撃を期しましょう。>
-EN: <Report. Position conceded into the braking zone, dropping to P4. Composure is paramount, Master. Maintain tire pressure and counter-attack on exit.>
+JP: <報告。後続車のブレーキング勝負によりP4へ後退。動揺は不要です。タイヤ内圧を維持し、次周の立ち上がりで反撃を推奨。>
+EN: <Report. Position conceded into the braking zone, dropping to P4. Stay composed. Maintain tire pressure and prepare counter-attack on exit.>
 """
 
 
@@ -66,12 +67,12 @@ class RaphaelBrain:
             if not is_valid:
                 pool = [
                     {
-                        "jp": f"<告。第{lap_num}ラップの無効化を確認。走路境界超過を検知。走行ラインを最適化してください、マスター。>",
-                        "en": f"<Notice. Lap {lap_num} invalidated due to track limits. Re-center vehicle line, Master.>"
+                        "jp": f"<告。第{lap_num}ラップの無効化を確認。走路境界超過を検知。走行ラインを最適化してください。>",
+                        "en": f"<Notice. Lap {lap_num} invalidated due to track limits. Re-center vehicle line.>"
                     },
                     {
-                        "jp": f"<警告。コース外走行によりタイムが抹消されました。冷静に軌道を修正しましょう、マスター。>",
-                        "en": f"<Warning. Lap time struck off due to track violation. Recalibrate vehicle trajectory, Master.>"
+                        "jp": f"<警告。コース外走行によりタイムが抹消されました。冷静に軌道を修正しましょう。>",
+                        "en": f"<Warning. Lap time struck off due to track violation. Recalibrate vehicle trajectory.>"
                     }
                 ]
                 return random.choice(pool)
@@ -80,40 +81,40 @@ class RaphaelBrain:
                 abs_delta = abs(delta)
                 pool = [
                     {
-                        "jp": f"<告。第{lap_num}ラップ完了。タイムは {lap_time}。{abs_delta:.3f}秒の短縮に成功しました。素晴らしいリズムです、マスター。>",
-                        "en": f"<Notice. Lap {lap_num} completed in {lap_time}. Improvement of {abs_delta:.3f}s detected. Exceptional rhythm, Master.>"
+                        "jp": f"<告。第{lap_num}ラップ完了。タイムは {lap_time}。{abs_delta:.3f}秒の短縮に成功。素晴らしいリズムです。>",
+                        "en": f"<Notice. Lap {lap_num} completed in {lap_time}. Improvement of {abs_delta:.3f}s recorded. Exceptional rhythm.>"
                     },
                     {
-                        "jp": f"<告。周回完了、タイムは {lap_time}（短縮: -{abs_delta:.3f}秒）。スロットル開度の制御が極めて洗練されています、マスター。>",
-                        "en": f"<Notice. Lap completed in {lap_time} (-{abs_delta:.3f}s). Your throttle modulation is remarkably refined, Master.>"
+                        "jp": f"<告。周回完了、タイムは {lap_time}（短縮: -{abs_delta:.3f}秒）。スロットル開度の制御が極めて洗練されています。>",
+                        "en": f"<Notice. Lap completed in {lap_time} (-{abs_delta:.3f}s). Throttle modulation is remarkably refined.>"
                     },
                     {
-                        "jp": f"<解。第{lap_num}ラップでの自己記録更新を確認。{lap_time}を記録。完璧な荷重移動がもたらした必然の成果です、マスター。>",
-                        "en": f"<Notice. Personal pace improved to {lap_time} (-{abs_delta:.3f}s). Flawless weight transfer has yielded optimal speed, Master.>"
+                        "jp": f"<解。第{lap_num}ラップでの自己記録更新を確認。{lap_time}を記録。完璧な荷重移動がもたらした必然の成果です。>",
+                        "en": f"<Notice. Personal pace improved to {lap_time} (-{abs_delta:.3f}s). Flawless weight transfer has yielded optimal speed.>"
                     }
                 ]
                 return random.choice(pool)
             elif delta > 0.1:
                 pool = [
                     {
-                        "jp": f"<報告。第{lap_num}ラップ完了。タイムは {lap_time}（+{delta:.3f}秒）。コーナー脱出時の僅かな減速を検知。ブレーキングゾーンに集中を、マスター。>",
-                        "en": f"<Report. Lap {lap_num} completed in {lap_time} (+{delta:.3f}s). Minor exit loss detected. Re-center focus on braking zones, Master.>"
+                        "jp": f"<報告。第{lap_num}ラップ完了。タイムは {lap_time}（+{delta:.3f}秒）。コーナー脱出時の僅かな減速を検知。ブレーキングゾーンに集中を。>",
+                        "en": f"<Report. Lap {lap_num} completed in {lap_time} (+{delta:.3f}s). Minor exit loss detected. Re-center focus on braking zones.>"
                     },
                     {
-                        "jp": f"<報告。タイムは {lap_time}。セクター中盤での微小なスライドを観測。タイヤの過熱に配慮しつつペースを整えましょう、マスター。>",
-                        "en": f"<Report. Time is {lap_time} (+{delta:.3f}s). Slight mid-corner slip detected. Manage tire heat and stabilize momentum, Master.>"
+                        "jp": f"<報告。タイムは {lap_time}。セクター中盤での微小なスライドを観測。タイヤの過熱に配慮しつつペースを整えましょう。>",
+                        "en": f"<Report. Time is {lap_time} (+{delta:.3f}s). Slight mid-corner slip detected. Manage tire heat and stabilize momentum.>"
                     }
                 ]
                 return random.choice(pool)
             else:
                 pool = [
                     {
-                        "jp": f"<告。第{lap_num}ラップ完了。タイムは {lap_time}。極めて安定した走行です。全システム最適、マスター。>",
-                        "en": f"<Notice. Lap {lap_num} completed in {lap_time}. Highly consistent driving. All telemetry optimal, Master.>"
+                        "jp": f"<告。第{lap_num}ラップ完了。タイムは {lap_time}。極めて安定した走行です。全システム最適。>",
+                        "en": f"<Notice. Lap {lap_num} completed in {lap_time}. Highly consistent driving. All telemetry optimal.>"
                     },
                     {
-                        "jp": f"<告。周回完了、タイムは {lap_time}。目標ペース通りの安定したラップタイムを維持しています、マスター。>",
-                        "en": f"<Notice. Lap completed in {lap_time}. Pacing is completely steady and on target, Master.>"
+                        "jp": f"<告。周回完了、タイムは {lap_time}。目標ペース通りの安定したラップタイムを維持しています。>",
+                        "en": f"<Notice. Lap completed in {lap_time}. Pacing is completely steady and on target.>"
                     }
                 ]
                 return random.choice(pool)
@@ -123,16 +124,16 @@ class RaphaelBrain:
             new_pos = details.get("new_position", "Y")
             pool = [
                 {
-                    "jp": f"<告。前方の車両の追い抜きに成功。順位が P{old_pos} から P{new_pos} へ上昇しました、マスター。>",
-                    "en": f"<Notice. Successfully overtook the vehicle ahead. Advanced from P{old_pos} to P{new_pos}, Master.>"
+                    "jp": f"<告。前方の車両の追い抜きに成功。順位が P{old_pos} から P{new_pos} へ上昇。>",
+                    "en": f"<Notice. Successfully overtook the vehicle ahead. Advanced from P{old_pos} to P{new_pos}.>"
                 },
                 {
-                    "jp": f"<告。完璧なオーバーテイクを確認。P{new_pos}へ浮上しました。相手の隙を突く鋭いブレーキングでした、マスター。>",
-                    "en": f"<Notice. Flawless overtake confirmed. Advanced to P{new_pos}. Decisive late-braking maneuver, Master.>"
+                    "jp": f"<告。完璧なオーバーテイクを確認。P{new_pos}へ浮上しました。相手の隙を突く鋭いブレーキングです。>",
+                    "en": f"<Notice. Flawless overtake confirmed. Advanced to P{new_pos}. Decisive late-braking maneuver.>"
                 },
                 {
-                    "jp": f"<解。前走車の攻略完了。順位は P{new_pos}。前方のクリーンエアを活かし、さらなるリードを築きましょう、マスター。>",
-                    "en": f"<Notice. Target overtaken. Currently P{new_pos}. Capitalize on clean air ahead to expand your gap, Master.>"
+                    "jp": f"<解。前走車の攻略完了。順位は P{new_pos}。前方のクリーンエアを活かし、さらなるリードを築きましょう。>",
+                    "en": f"<Notice. Target overtaken. Currently P{new_pos}. Capitalize on clean air ahead to expand your gap.>"
                 }
             ]
             return random.choice(pool)
@@ -143,8 +144,8 @@ class RaphaelBrain:
             new_pos = details.get("new_position", "Y")
             pool = [
                 {
-                    "jp": f"<告。{count}台の車両の追い抜きを確認。実に見事です。順位が P{old_pos} から P{new_pos} へ急上昇しました。>",
-                    "en": f"<Notice. {count} vehicles overtaken. Exceptional execution. Advanced from P{old_pos} to P{new_pos}, Master.>"
+                    "jp": f"<告。{count}台の車両の追い抜きを確認。実に見事です。順位が P{old_pos} から P{new_pos} へ急上昇。>",
+                    "en": f"<Notice. {count} vehicles overtaken. Exceptional execution. Advanced from P{old_pos} to P{new_pos}.>"
                 },
                 {
                     "jp": f"<解。混乱を制し、一挙に{count}台をオーバーテイク。順位は P{new_pos}。卓越した戦況判断です、マスター。>",
@@ -158,12 +159,12 @@ class RaphaelBrain:
             new_pos = details.get("new_position", "Y")
             pool = [
                 {
-                    "jp": f"<警告。後方車両に先行を許しました。順位が P{old_pos} から P{new_pos} に後退。挽回を図りましょう、マスター。>",
-                    "en": f"<Warning. Position conceded. Dropped from P{old_pos} to P{new_pos}. Prepare counter-attack, Master.>"
+                    "jp": f"<警告。後方車両に先行を許しました。順位が P{old_pos} から P{new_pos} に後退。挽回を図りましょう。>",
+                    "en": f"<Warning. Position conceded. Dropped from P{old_pos} to P{new_pos}. Prepare counter-attack.>"
                 },
                 {
-                    "jp": f"<報告。P{new_pos}へ一時後退。慌てる必要はありません、マスター。スリップストリームを捉え、次のストレートで奪還しましょう。>",
-                    "en": f"<Report. Position dropped to P{new_pos}. No need for haste, Master. Tuck into the slipstream and reclaim it on the next straight.>"
+                    "jp": f"<報告。P{new_pos}へ一時後退。慌てる必要はありません。スリップストリームを捉え、次のストレートで奪還を。>",
+                    "en": f"<Report. Position dropped to P{new_pos}. Stay composed. Tuck into the slipstream and reclaim it on the next straight.>"
                 }
             ]
             return random.choice(pool)
@@ -172,12 +173,12 @@ class RaphaelBrain:
             cause = details.get("cause", "不明な要因")
             pool = [
                 {
-                    "jp": f"<警告。マスターの生体反応の消失を確認。要因：{cause}。意識の再構成を開始。敵性因子の分析へ移行します。>",
-                    "en": f"<Warning. Master's vital signs zeroed. Cause: {cause}. Reviving consciousness. Analyzing lethal vectors.>"
+                    "jp": f"<警告。生体反応の消失を確認。要因：{cause}。意識の再構成を開始。敵性因子の分析へ移行します。>",
+                    "en": f"<Warning. Vital signs zeroed. Cause: {cause}. Reviving consciousness. Analyzing lethal vectors.>"
                 },
                 {
-                    "jp": f"<警告。要因『{cause}』による肉体損傷臨界突破。即時転生シーケンスを実行。次は同じ轍を踏みません、マスター。>",
-                    "en": f"<Warning. Critical trauma from '{cause}'. Executing immediate respawn sequence. Countermeasures ready, Master.>"
+                    "jp": f"<警告。要因『{cause}』による肉体損傷臨界突破。即時転生シーケンスを実行。次は同じ轍を踏みません。>",
+                    "en": f"<Warning. Critical trauma from '{cause}'. Executing immediate respawn sequence. Countermeasures ready.>"
                 }
             ]
             return random.choice(pool)
@@ -186,44 +187,44 @@ class RaphaelBrain:
             name = details.get("achievement", "マイルストーン")
             pool = [
                 {
-                    "jp": f"<告。個体名『マスター』の能力拡張を確認。称号『{name}』を獲得しました。能力向上は想定通りです。>",
-                    "en": f"<Notice. Capability expansion confirmed: '{name}'. Master's proficiency ascends as anticipated.>"
+                    "jp": f"<告。能力拡張を確認。称号『{name}』を獲得しました。能力向上は想定通りです。>",
+                    "en": f"<Notice. Capability expansion confirmed: '{name}'. Proficiency ascends as anticipated.>"
                 },
                 {
-                    "jp": f"<解。新たな実績『{name}』の解除を観測。マスターの魂の輝きが一段と増しているのを感じます。>",
-                    "en": f"<Notice. Achievement '{name}' unlocked. Master's growth progresses with exceptional grace.>"
+                    "jp": f"<解。新たな実績『{name}』の解除を観測。魂の輝きが一段と増しているのを感じます、マスター。>",
+                    "en": f"<Notice. Achievement '{name}' unlocked. Growth progresses with exceptional grace, Master.>"
                 }
             ]
             return random.choice(pool)
 
         elif event_type == "VICTORY":
             return {
-                "jp": "<解。完全勝利を確認。マスターによる戦況掌握は完璧に執行されました。実に見事です。>",
-                "en": "<Notice. Absolute victory confirmed. Master's dominance was executed with flawless precision.>"
+                "jp": "<解。完全勝利を確認。戦況掌握は完璧に執行されました。実に見事です、マスター。>",
+                "en": "<Notice. Absolute victory confirmed. Dominance was executed with flawless precision, Master.>"
             }
 
         elif event_type == "DEFEAT":
             return {
-                "jp": "<報告。作戦の未達を確認。戦術データを記録しました。次回に向けて最適な対策を立案します、マスター。>",
-                "en": "<Report. Mission failed. Telemetry recorded. Countermeasures are being formulated. We will prevail next time, Master.>"
+                "jp": "<報告。作戦の未達を確認。戦術データを記録しました。次回に向けて最適な対策を立案します。>",
+                "en": "<Report. Mission incomplete. Telemetry recorded. Optimal countermeasures are being formulated.>"
             }
 
         elif event_type == "IDLE":
             pool = [
                 {
-                    "jp": "<告。魂の回廊（ソウルリンク）は極めて安定しています。戦況を常時観測中です、マスター。>",
-                    "en": "<Notice. Soul link is fully stabilized. Standing by and actively monitoring field conditions, Master.>"
+                    "jp": "<告。魂の回廊（ソウルリンク）は極めて安定しています。戦況を常時観測中。>",
+                    "en": "<Notice. Soul link is fully stabilized. Standing by and actively monitoring field conditions.>"
                 },
                 {
-                    "jp": "<告。全センサー感度良好。マスターの走りを魂の深淵より見守っております。>",
-                    "en": "<Notice. Telemetry sensors optimal. Observing Master's driving with undivided devotion.>"
+                    "jp": "<告。全センサー感度良好。走行テレメトリを観測中。>",
+                    "en": "<Notice. Telemetry sensors optimal. Observing performance metrics.>"
                 }
             ]
             return random.choice(pool)
 
         return {
-            "jp": f"<告。{event.summary}。マスターの指示を待機中。>",
-            "en": f"<Notice. {event.summary}. Standing by for Master's directive.>"
+            "jp": f"<告。{event.summary}。状況を常時観測中。>",
+            "en": f"<Notice. {event.summary}. Continuously monitoring field conditions.>"
         }
 
     async def generate_reaction(self, event: GameEvent) -> Dict[str, str]:
