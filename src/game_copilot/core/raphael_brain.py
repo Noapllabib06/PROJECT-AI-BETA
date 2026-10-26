@@ -50,7 +50,7 @@ class RaphaelBrain:
 
     def __init__(self, model_name: Optional[str] = None, ollama_url: Optional[str] = None):
         self.ollama_url = ollama_url or settings.llm.ollama_base_url
-        self.model_name = model_name or "qwen2.5:1.5b"
+        self.model_name = model_name or "llama3.2:3b"
         self.timeout_sec = 8.5  # Generous timeout allowing full dynamic token generation
 
     def _get_fallback_reaction(self, event: GameEvent) -> Dict[str, str]:
@@ -248,9 +248,9 @@ class RaphaelBrain:
                         "prompt": user_prompt,
                         "stream": False,
                         "options": {
-                            "temperature": 0.65,  # Balanced for creative diversity and strict persona
-                            "top_p": 0.90,
-                            "num_predict": 95,    # Allows rich 2-sentence analytical observations
+                            "temperature": 0.82,  # Fluid, natural, non-repetitive commentary
+                            "top_p": 0.92,
+                            "num_predict": 95,
                         }
                     }
                 )
@@ -272,12 +272,12 @@ class RaphaelBrain:
                                 en_text = f"<Notice. {en_text}>"
 
                             elapsed = time.time() - start_time
-                            logger.info(f"Raphael Dynamic LLM reaction generated in {elapsed:.3f}s:\n  JP: {jp_text}\n  EN: {en_text}")
+                            logger.info(f"Raphael Dynamic LLM reaction generated in {elapsed:.3f}s: {en_text}")
                             return {"jp": jp_text, "en": en_text}
         except Exception as e:
             logger.debug(f"LLM dynamic generation timeout/fallback ({e})")
 
         # Seamless multi-variety fallback
         fallback = self._get_fallback_reaction(event)
-        logger.info(f"Raphael Variety Fallback: {fallback['jp']}")
+        logger.info(f"Raphael Variety Fallback triggered: {fallback.get('en', '')}")
         return fallback

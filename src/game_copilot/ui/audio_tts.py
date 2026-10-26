@@ -26,13 +26,48 @@ def clean_japanese_for_speech(text: str) -> str:
 
 
 class RaphaelAudioTTS:
-    """High-fidelity Tensura voice synthesizer using Japanese neural voice NanamiNeural."""
+    """High-fidelity Tensura voice synthesizer with crystalline divine chime and tuned feminine divine pitch."""
 
-    def __init__(self, voice_name: str = "ja-JP-NanamiNeural", rate: str = "+0%"):
+    def __init__(
+        self,
+        voice_name: str = "ja-JP-NanamiNeural",
+        rate: str = "+6%",
+        pitch: str = "+18Hz",
+        play_chime: bool = True
+    ):
         self.voice_name = voice_name
         self.rate = rate
+        self.pitch = pitch
+        self.play_chime = play_chime
         self._enabled = True
         self._lock = asyncio.Lock()
+        self._chime_path = CACHE_DIR / "tensura_chime.wav"
+        if not self._chime_path.exists():
+            self._generate_default_chime(self._chime_path)
+
+    @staticmethod
+    def _generate_default_chime(target_path: Path) -> None:
+        """Generates authentic high-frequency crystalline chime for Tensura Voice of the World preamble."""
+        try:
+            import wave
+            import struct
+            import math
+            sample_rate = 44100
+            duration = 0.38
+            num_samples = int(sample_rate * duration)
+            f1, f2, f3 = 1760.0, 2637.0, 3520.0  # High harmonic crystal triad
+            with wave.open(str(target_path), 'w') as wav:
+                wav.setnchannels(1)
+                wav.setsampwidth(2)
+                wav.setframerate(sample_rate)
+                for i in range(num_samples):
+                    t = i / sample_rate
+                    env = math.exp(-t * 10.0) * (1.0 - math.exp(-t * 120.0))
+                    val = 0.5 * math.sin(2 * math.pi * f1 * t) + 0.35 * math.sin(2 * math.pi * f2 * t) + 0.15 * math.sin(2 * math.pi * f3 * t)
+                    sample = int(32767.0 * env * val * 0.85)
+                    wav.writeframes(struct.pack('<h', max(-32768, min(32767, sample))))
+        except Exception:
+            pass
 
     def set_enabled(self, enabled: bool) -> None:
         self._enabled = enabled
@@ -55,7 +90,7 @@ class RaphaelAudioTTS:
             logger.warning(f"WinMM audio playback exception: {e}")
 
     async def speak_japanese(self, jp_text: str) -> None:
-        """Asynchronously synthesizes Japanese speech using edge-tts and plays it."""
+        """Asynchronously synthesizes Japanese speech using edge-tts and plays it with Tensura chime."""
         if not self._enabled:
             return
 
@@ -67,11 +102,21 @@ class RaphaelAudioTTS:
 
         try:
             import edge_tts
-            communicate = edge_tts.Communicate(speech_text, self.voice_name, rate=self.rate)
+            communicate = edge_tts.Communicate(
+                speech_text,
+                self.voice_name,
+                rate=self.rate,
+                pitch=self.pitch
+            )
             await communicate.save(str(temp_audio_file))
 
-            # Play in worker thread so event loop remains free
+            # Play chime preamble followed by the voice
             loop = asyncio.get_event_loop()
+            if self.play_chime and self._chime_path.exists():
+                await loop.run_in_executor(None, self._play_audio_file, str(self._chime_path))
+                await asyncio.sleep(0.06)
+
+            # Play voice in worker thread so event loop remains free
             await loop.run_in_executor(None, self._play_audio_file, str(temp_audio_file))
         except Exception as e:
             logger.warning(f"Edge-TTS synthesis error ({e}), falling back to Windows SAPI.")

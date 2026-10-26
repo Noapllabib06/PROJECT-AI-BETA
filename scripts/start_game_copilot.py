@@ -38,19 +38,19 @@ def unload_heavy_models():
         pass
 
 
-async def main_async(enable_acc: bool = True, enable_mc: bool = True, enable_voice: bool = True, enable_overlay: bool = False, model_name: str = "qwen2.5:1.5b"):
+async def main_async(enable_acc: bool = True, enable_mc: bool = True, enable_voice: bool = True, enable_overlay: bool = False, model_name: str = "llama3.2:3b"):
     unload_heavy_models()
 
     mode_desc = "DESKTOP HUD OVERLAY" if enable_overlay else "PURE VOICE SPOTTER (Radio Helm - 0% Gangguan Layar)"
     acc_status = "ACTIVE (Waiting for ACC to start...)" if enable_acc else "DISABLED"
     mc_status = "ACTIVE (Streaming .minecraft/logs/latest.log)" if enable_mc else "DISABLED"
-    voice_status = "ENABLED (Tensura Japanese Neural Voice)" if enable_voice else "DISABLED"
+    voice_status = "ENABLED (Tensura Crystal Divine Voice & Chime)" if enable_voice else "DISABLED"
 
     print("=" * 72)
     print("   « 智恵之王 » RAPHAEL AI GAMING COPILOT - GT3 VOICE SPOTTER")
     print("=" * 72)
     print(f"[*] Operation Mode : {mode_desc}")
-    print(f"[*] Active LLM Model: {model_name} (Lightweight ~980MB, Zero Game Lag)")
+    print(f"[*] Active LLM Model: {model_name} (High-Context Reasoning & Fluid Speech)")
     print(f"[*] Voice Engine   : {voice_status}")
     print(f"[*] ACC Telemetry  : {acc_status}")
     print(f"[*] Minecraft Log  : {mc_status}")
@@ -81,7 +81,7 @@ async def main_async(enable_acc: bool = True, enable_mc: bool = True, enable_voi
         await asyncio.sleep(0.5)
 
     tts: Optional[RaphaelAudioTTS] = RaphaelAudioTTS() if enable_voice else None
-    brain = RaphaelBrain()
+    brain = RaphaelBrain(model_name=model_name)
 
     # Route event to Brain, TTS, and optional HUD
     async def on_game_event(evt: GameEvent):
