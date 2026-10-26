@@ -67,7 +67,7 @@ class ConversationManager:
         self.storage_dir.mkdir(parents=True, exist_ok=True)
 
     def _file_path_for(self, conversation_id: str) -> Path:
-        safe_id = re.sub(r"[^a-zA-Z0-9\-]", "", str(conversation_id))
+        safe_id = re.sub(r"[^a-zA-Z0-9\-]", "", conversation_id)
         return self.storage_dir / f"{safe_id}.json"
 
     @staticmethod

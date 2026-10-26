@@ -53,11 +53,11 @@ def open_app(query: str) -> str:
     logger.info(f"Opening desktop app: '{cmd}'")
     try:
         if sys.platform == "win32":
-            os.system(f"start {cmd}")
+            subprocess.Popen(["cmd", "/c", f"start {cmd}"], shell=True, creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0))
         elif sys.platform == "darwin":
-            os.system(f"open -a '{cmd}'")
+            subprocess.Popen(["open", "-a", cmd])
         else:
-            os.system(f"{cmd} &")
+            subprocess.Popen([cmd])
         return f"✅ Berhasil membuka aplikasi '{query}'."
     except Exception as e:
         logger.error(f"Failed to open app {query}: {e}")

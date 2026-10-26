@@ -145,6 +145,8 @@ class RaphaelDesktopOverlay:
             self._drag_y = event.y
 
         def _on_drag_motion(event):
+            if not self.root:
+                return
             deltax = event.x - self._drag_x
             deltay = event.y - self._drag_y
             new_x = self.root.winfo_x() + deltax
@@ -170,6 +172,8 @@ class RaphaelDesktopOverlay:
         if sys.platform == "win32":
             import ctypes
             def _enforce_win32_topmost():
+                if not self.root:
+                    return
                 try:
                     hwnd = self.root.winfo_id()
                     # HWND_TOPMOST = -1, SWP_NOSIZE = 0x0001, SWP_NOMOVE = 0x0002, SWP_NOACTIVATE = 0x0010

@@ -115,6 +115,8 @@ class ACCAdapter(BaseGameAdapter):
         if not self._p_buf:
             if not self._open_shared_memory():
                 return None
+        if self._p_buf is None:
+            return None
 
         try:
             # Read 160 bytes from the mapped memory address

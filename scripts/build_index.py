@@ -92,7 +92,7 @@ def build_codebase_index(directory_path: str) -> int:
 
                 files_processed += 1
             except Exception as e:
-                logger.warn(f"Failed to index file {file_path}: {e}")
+                logger.warning(f"Failed to index file {file_path}: {e}")
 
     logger.info(f"Indexing completed: {files_processed} files processed, {total_indexed} chunks saved to Vector DB.")
     return total_indexed

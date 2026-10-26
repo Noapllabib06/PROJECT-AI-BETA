@@ -315,9 +315,13 @@ def search_second_brain(query: str, top_k: int = 4) -> str:
         )
 
         formatted = []
-        docs = results.get("documents", [[]])[0]
-        metas = results.get("metadatas", [[]])[0]
-        distances = results.get("distances", [[]])[0] if "distances" in results else [0.0] * len(docs)
+        raw_docs = results.get("documents") or [[]]
+        raw_metas = results.get("metadatas") or [[]]
+        raw_distances = results.get("distances") or [[]]
+
+        docs = raw_docs[0] if raw_docs else []
+        metas = raw_metas[0] if raw_metas else []
+        distances = raw_distances[0] if raw_distances else [0.0] * len(docs)
 
         for doc, meta, dist in zip(docs, metas, distances):
             t = meta.get("title", "Catatan")
