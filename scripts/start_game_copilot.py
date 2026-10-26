@@ -60,10 +60,24 @@ async def main_async(enable_acc: bool = True, enable_mc: bool = True, enable_voi
     print("=" * 68)
 
     overlay: Optional[RaphaelDesktopOverlay] = None
+    stop_event = asyncio.Event()
+
+    def _trigger_stop(*args):
+        stop_event.set()
+
+    for sig in (signal.SIGINT, signal.SIGTERM):
+        try:
+            signal.signal(sig, lambda s, f: _trigger_stop())
+        except Exception:
+            pass
+
     if enable_overlay:
-        overlay = RaphaelDesktopOverlay(enable_tts=enable_voice)
+        overlay = RaphaelDesktopOverlay(
+            enable_tts=enable_voice,
+            on_close=lambda: _trigger_stop()
+        )
         overlay.start()
-        await asyncio.sleep(1.0)
+        await asyncio.sleep(0.5)
 
     brain = RaphaelBrain()
 
@@ -93,15 +107,21 @@ async def main_async(enable_acc: bool = True, enable_mc: bool = True, enable_voi
         adapters.append(mc)
 
     try:
-        # Keep alive loop
-        while True:
-            await asyncio.sleep(1.0)
+        # Keep alive loop with fast exit checking
+        while not stop_event.is_set():
+            try:
+                await asyncio.wait_for(stop_event.wait(), timeout=0.5)
+            except asyncio.TimeoutError:
+                pass
     except (asyncio.CancelledError, KeyboardInterrupt):
         pass
     finally:
         print("\n[*] Mematikan sensor dan menutup Raphael Copilot...")
         for adapter in adapters:
-            await adapter.stop()
+            try:
+                await adapter.stop()
+            except Exception:
+                pass
         if overlay:
             overlay.close()
         print("[*] Raphael Copilot dinonaktifkan dengan aman. Sampai jumpa, Master.")

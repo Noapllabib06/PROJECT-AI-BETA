@@ -6,7 +6,7 @@ import threading
 import asyncio
 import tkinter as tk
 from tkinter import font as tkfont
-from typing import Optional, Dict, Any
+from typing import Optional, Dict, Any, Callable
 from config.settings import get_logger
 from src.game_copilot.core.event_bus import GameEvent
 from src.game_copilot.ui.audio_tts import RaphaelAudioTTS
@@ -17,12 +17,21 @@ logger = get_logger("RaphaelHUDOverlay")
 class RaphaelDesktopOverlay:
     """Always-on-top, borderless desktop HUD located in the top-left corner (draggable across screens)."""
 
-    def __init__(self, x: int = 24, y: int = 24, width: int = 480, height: int = 160, enable_tts: bool = True):
+    def __init__(
+        self,
+        x: int = 24,
+        y: int = 24,
+        width: int = 480,
+        height: int = 160,
+        enable_tts: bool = True,
+        on_close: Optional[Callable[[], None]] = None
+    ):
         self.x = x
         self.y = y
         self.width = width
         self.height = height
         self.enable_tts = enable_tts
+        self.on_close = on_close
 
         self.root: Optional[tk.Tk] = None
         self._msg_queue: queue.Queue = queue.Queue()
@@ -78,6 +87,22 @@ class RaphaelDesktopOverlay:
         )
         self.lbl_title.pack(side=tk.LEFT)
 
+        # Close Button (✕)
+        self.btn_close = tk.Label(
+            header,
+            text=" ✕ ",
+            font=tkfont.Font(family="Segoe UI", size=9, weight="bold"),
+            fg="#94a3b8",
+            bg="#111827",
+            padx=3,
+            pady=1,
+            cursor="hand2"
+        )
+        self.btn_close.pack(side=tk.RIGHT)
+        self.btn_close.bind("<Enter>", lambda e: self.btn_close.config(fg="#ffffff", bg="#ef4444"))
+        self.btn_close.bind("<Leave>", lambda e: self.btn_close.config(fg="#94a3b8", bg="#111827"))
+        self.btn_close.bind("<Button-1>", lambda e: self._handle_user_exit())
+
         # Game Status Label
         status_font = tkfont.Font(family="Consolas", size=9)
         self.lbl_status = tk.Label(
@@ -87,7 +112,7 @@ class RaphaelDesktopOverlay:
             fg="#7dd3fc",
             bg=bg_color
         )
-        self.lbl_status.pack(side=tk.RIGHT)
+        self.lbl_status.pack(side=tk.RIGHT, padx=(0, 8))
 
         # Event Badge
         badge_font = tkfont.Font(family="Segoe UI", size=8, weight="bold")
@@ -155,18 +180,43 @@ class RaphaelDesktopOverlay:
             self.y = new_y
             self.root.geometry(f"+{new_x}+{new_y}")
 
-        # Bind dragging to all labels and frames so user can grab and move anywhere
-        for widget in [
+        # Context Menu & Right-click exit
+        self.context_menu = tk.Menu(
+            self.root,
+            tearoff=0,
+            bg="#0f172a",
+            fg="#e2e8f0",
+            activebackground="#0284c7",
+            activeforeground="#ffffff",
+            font=("Segoe UI", 9)
+        )
+        self.context_menu.add_command(label="✕ Tutup Raphael Copilot (Exit)", command=self._handle_user_exit)
+        self.context_menu.add_separator()
+        self.context_menu.add_command(label="↻ Reset Posisi ke Default", command=self._reset_position)
+
+        def _show_context_menu(event):
+            try:
+                self.context_menu.tk_popup(event.x_root, event.y_root)
+            finally:
+                self.context_menu.grab_release()
+
+        # Bind dragging and context menu to all labels and frames so user can grab and move anywhere
+        interactive_widgets = [
             self.root, self.inner_frame, header, self.lbl_title,
             self.lbl_status, self.lbl_badge, self.lbl_speech_jp,
             self.lbl_speech_en, self.lbl_telem
-        ]:
+        ]
+        for widget in interactive_widgets:
             widget.bind("<ButtonPress-1>", _on_drag_start)
             widget.bind("<B1-Motion>", _on_drag_motion)
+            widget.bind("<Button-3>", _show_context_menu)
             try:
                 widget.configure(cursor="fleur")
             except Exception:
                 pass
+
+        # Escape key closes overlay
+        self.root.bind("<Escape>", lambda e: self._handle_user_exit())
 
         # ==================== WIN32 ABSOLUTE TOPMOST ENFORCEMENT ====================
         if sys.platform == "win32":
@@ -313,3 +363,23 @@ class RaphaelDesktopOverlay:
             except Exception:
                 pass
             self.root = None
+
+    def _handle_user_exit(self, event=None) -> None:
+        """Handles explicit user shutdown from UI button, context menu, or Escape key."""
+        logger.info("Pengguna meminta penghentian Raphael Copilot melalui UI.")
+        self.close()
+        if self.on_close:
+            try:
+                self.on_close()
+            except Exception as e:
+                logger.error(f"Error in on_close callback: {e}")
+        else:
+            import os
+            os._exit(0)
+
+    def _reset_position(self) -> None:
+        """Resets the overlay position to default coordinates."""
+        self.x = 24
+        self.y = 24
+        if self.root:
+            self.root.geometry(f"+{self.x}+{self.y}")

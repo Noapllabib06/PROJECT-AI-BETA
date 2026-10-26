@@ -12,4 +12,8 @@ if (-not (Test-Path $venvPython)) {
     $venvPython = "python"
 }
 
-& $venvPython scripts/start_game_copilot.py $args
+try {
+    & $venvPython scripts/start_game_copilot.py $args
+} finally {
+    Write-Host "[*] Raphael Copilot selesai." -ForegroundColor Cyan
+}
