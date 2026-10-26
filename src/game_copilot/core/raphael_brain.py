@@ -69,6 +69,31 @@ class RaphaelBrain:
                 "en": f"<Warning. Master's vital signs zeroed. Cause: {cause}. Reviving consciousness. Analyzing lethal vectors.>"
             }
 
+        elif event_type == "OVERTAKE":
+            old_pos = details.get("old_position", "X")
+            new_pos = details.get("new_position", "Y")
+            return {
+                "jp": f"<告。前方の車両の追い抜きに成功。順位が P{old_pos} から P{new_pos} へ上昇しました、マスター。>",
+                "en": f"<Notice. Successfully overtook the vehicle ahead. Advanced from P{old_pos} to P{new_pos}, Master.>"
+            }
+
+        elif event_type == "MULTI_OVERTAKE":
+            count = details.get("count", 2)
+            old_pos = details.get("old_position", "X")
+            new_pos = details.get("new_position", "Y")
+            return {
+                "jp": f"<告。{count}台の車両の追い抜きを確認。実に見事です。順位が P{old_pos} から P{new_pos} へ急上昇しました。>",
+                "en": f"<Notice. {count} vehicles overtaken. Exceptional execution. Advanced from P{old_pos} to P{new_pos}, Master.>"
+            }
+
+        elif event_type == "POSITION_LOST":
+            old_pos = details.get("old_position", "X")
+            new_pos = details.get("new_position", "Y")
+            return {
+                "jp": f"<警告。後方車両に先行を許しました。順位が P{old_pos} から P{new_pos} に後退。挽回を図りましょう、マスター。>",
+                "en": f"<Warning. Position conceded. Dropped from P{old_pos} to P{new_pos}. Prepare counter-attack, Master.>"
+            }
+
         elif event_type == "ACHIEVEMENT":
             name = details.get("achievement", "マイルストーン")
             return {

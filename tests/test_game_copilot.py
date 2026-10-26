@@ -123,6 +123,86 @@ def test_acc_lap_formatting_and_telemetry():
     assert evt2.details["is_personal_best"] is True
 
 
+def test_acc_overtake_detection():
+    adapter = ACCAdapter()
+
+    # Initial state: Position 5
+    evts0 = adapter.detect_events({"status": 2, "position": 5, "completed_laps": 0, "last_time_ms": 0})
+    assert len(evts0) == 0
+    assert adapter._last_position == 5
+
+    # 1. Single Overtake: P5 -> P4
+    evts1 = adapter.detect_events({"status": 2, "position": 4, "completed_laps": 0, "last_time_ms": 0})
+    assert len(evts1) == 1
+    assert evts1[0].event_type == "OVERTAKE"
+    assert evts1[0].details["old_position"] == 5
+    assert evts1[0].details["new_position"] == 4
+    assert evts1[0].details["count"] == 1
+    assert evts1[0].details["is_multi"] is False
+
+    # 2. Multi-Overtake: P4 -> P1 (3 cars passed)
+    evts2 = adapter.detect_events({"status": 2, "position": 1, "completed_laps": 0, "last_time_ms": 0})
+    assert len(evts2) == 1
+    assert evts2[0].event_type == "MULTI_OVERTAKE"
+    assert evts2[0].severity == "CELEBRATION"
+    assert evts2[0].details["old_position"] == 4
+    assert evts2[0].details["new_position"] == 1
+    assert evts2[0].details["count"] == 3
+    assert evts2[0].details["is_multi"] is True
+
+    # 3. Position Lost: P1 -> P3 (2 cars conceded)
+    evts3 = adapter.detect_events({"status": 2, "position": 3, "completed_laps": 0, "last_time_ms": 0})
+    assert len(evts3) == 1
+    assert evts3[0].event_type == "POSITION_LOST"
+    assert evts3[0].severity == "WARNING"
+    assert evts3[0].details["old_position"] == 1
+    assert evts3[0].details["new_position"] == 3
+    assert evts3[0].details["count"] == 2
+
+
+def test_raphael_overtake_templates():
+    brain = RaphaelBrain()
+
+    # Single Overtake Reaction
+    ot_evt = GameEvent(
+        game_name="Assetto Corsa Competizione",
+        event_type="OVERTAKE",
+        severity="INFO",
+        summary="Overtake P5 -> P4",
+        details={"old_position": 5, "new_position": 4, "count": 1}
+    )
+    res_ot = brain._get_fallback_reaction(ot_evt)
+    assert res_ot["jp"].startswith("<告。")
+    assert "P5" in res_ot["jp"] and "P4" in res_ot["jp"]
+    assert "P5" in res_ot["en"] and "P4" in res_ot["en"]
+
+    # Multi Overtake Reaction
+    multi_evt = GameEvent(
+        game_name="Assetto Corsa Competizione",
+        event_type="MULTI_OVERTAKE",
+        severity="CELEBRATION",
+        summary="Multi-overtake P4 -> P1",
+        details={"old_position": 4, "new_position": 1, "count": 3}
+    )
+    res_multi = brain._get_fallback_reaction(multi_evt)
+    assert res_multi["jp"].startswith("<告。")
+    assert "3台" in res_multi["jp"]
+    assert "3 vehicles" in res_multi["en"]
+
+    # Position Lost Reaction
+    lost_evt = GameEvent(
+        game_name="Assetto Corsa Competizione",
+        event_type="POSITION_LOST",
+        severity="WARNING",
+        summary="Position lost P1 -> P3",
+        details={"old_position": 1, "new_position": 3, "count": 2}
+    )
+    res_lost = brain._get_fallback_reaction(lost_evt)
+    assert res_lost["jp"].startswith("<警告。")
+    assert "P1" in res_lost["jp"] and "P3" in res_lost["jp"]
+    assert res_lost["en"].startswith("<Warning.")
+
+
 def test_minecraft_log_parsing():
     adapter = MinecraftAdapter()
 

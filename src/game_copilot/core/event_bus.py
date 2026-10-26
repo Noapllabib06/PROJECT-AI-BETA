@@ -30,6 +30,9 @@ class EventBus:
             "LAP_COMPLETED": 8.0,
             "PLAYER_DEATH": 1.0,     # Critical events have almost no cooldown
             "ACHIEVEMENT": 5.0,
+            "OVERTAKE": 2.5,
+            "MULTI_OVERTAKE": 2.5,
+            "POSITION_LOST": 3.0,
             "WARNING": 10.0,
             "VICTORY": 3.0,
             "DEFEAT": 3.0,

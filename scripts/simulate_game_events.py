@@ -72,6 +72,45 @@ async def run_simulation(enable_overlay: bool = True, enable_voice: bool = True)
         if lap1_event:
             await event_bus.publish(lap1_event)
 
+        # STEP 1.5: ACC Single Overtake (P5 -> P4)
+        print("\n>>> Scenario 1.5: ACC - Single Overtake (P5 -> P4, Passed 1 car)")
+        await asyncio.sleep(5.0)
+        overtake_events = acc_adapter.detect_events({
+            "status": 2,
+            "completed_laps": 1,
+            "last_time_ms": 112410,
+            "best_time_ms": 112410,
+            "position": 4,  # Advanced to P4
+        })
+        for evt in overtake_events:
+            await event_bus.publish(evt)
+
+        # STEP 1.8: ACC Multi-Overtake (P4 -> P2, Passed 2 cars in one corner)
+        print("\n>>> Scenario 1.8: ACC - Multi Overtake! (P4 -> P2, Passed 2 cars in one sequence)")
+        await asyncio.sleep(5.0)
+        multi_events = acc_adapter.detect_events({
+            "status": 2,
+            "completed_laps": 1,
+            "last_time_ms": 112410,
+            "best_time_ms": 112410,
+            "position": 2,  # Advanced to P2
+        })
+        for evt in multi_events:
+            await event_bus.publish(evt)
+
+        # STEP 1.9: ACC Position Lost (P2 -> P3)
+        print("\n>>> Scenario 1.9: ACC - Position Lost (P2 -> P3, Counter-attacked)")
+        await asyncio.sleep(5.0)
+        lost_events = acc_adapter.detect_events({
+            "status": 2,
+            "completed_laps": 1,
+            "last_time_ms": 112410,
+            "best_time_ms": 112410,
+            "position": 3,  # Dropped to P3
+        })
+        for evt in lost_events:
+            await event_bus.publish(evt)
+
         # STEP 2: ACC Lap 2 Completed (IMPROVEMENT! Delta -1.590s)
         print("\n>>> Scenario 2: ACC - Lap 2 completed with significant lap time improvement (-1.590s)")
         await asyncio.sleep(6.0)

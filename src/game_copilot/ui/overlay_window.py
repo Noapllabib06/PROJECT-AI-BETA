@@ -1,4 +1,4 @@
-"""Native Transparent Desktop HUD Overlay with Authentic Tensura Aesthetic, Bilingual Display, and Idle State."""
+"""Native Transparent Desktop HUD Overlay with Authentic Tensura Aesthetic, Bilingual Display, Win32 Hardened Topmost, and Draggable Window."""
 
 import sys
 import queue
@@ -15,7 +15,7 @@ logger = get_logger("RaphaelHUDOverlay")
 
 
 class RaphaelDesktopOverlay:
-    """Always-on-top, borderless desktop HUD located in the top-left corner."""
+    """Always-on-top, borderless desktop HUD located in the top-left corner (draggable across screens)."""
 
     def __init__(self, x: int = 24, y: int = 24, width: int = 480, height: int = 160, enable_tts: bool = True):
         self.x = x
@@ -31,6 +31,9 @@ class RaphaelDesktopOverlay:
         self._running = False
         self._idle_timer_id = None
         self._idle_timeout_ms = 9000  # Return to idle after 9 seconds
+
+        self._drag_x = 0
+        self._drag_y = 0
 
     def start(self) -> None:
         """Launches the Tkinter overlay in a dedicated daemon thread."""
@@ -129,12 +132,55 @@ class RaphaelDesktopOverlay:
         telem_font = tkfont.Font(family="Consolas", size=8)
         self.lbl_telem = tk.Label(
             self.inner_frame,
-            text="STATUS: OPTIMAL | LINK: 100% SYNCHRONIZED",
+            text="STATUS: OPTIMAL | LINK: 100% SYNCHRONIZED [DRAG TO MOVE]",
             font=telem_font,
             fg="#38bdf8",
             bg=bg_color
         )
         self.lbl_telem.pack(anchor="w", padx=12, pady=(0, 6))
+
+        # ==================== DRAGGABLE MOUSE BINDINGS ====================
+        def _on_drag_start(event):
+            self._drag_x = event.x
+            self._drag_y = event.y
+
+        def _on_drag_motion(event):
+            deltax = event.x - self._drag_x
+            deltay = event.y - self._drag_y
+            new_x = self.root.winfo_x() + deltax
+            new_y = self.root.winfo_y() + deltay
+            self.x = new_x
+            self.y = new_y
+            self.root.geometry(f"+{new_x}+{new_y}")
+
+        # Bind dragging to all labels and frames so user can grab and move anywhere
+        for widget in [
+            self.root, self.inner_frame, header, self.lbl_title,
+            self.lbl_status, self.lbl_badge, self.lbl_speech_jp,
+            self.lbl_speech_en, self.lbl_telem
+        ]:
+            widget.bind("<ButtonPress-1>", _on_drag_start)
+            widget.bind("<B1-Motion>", _on_drag_motion)
+            try:
+                widget.configure(cursor="fleur")
+            except Exception:
+                pass
+
+        # ==================== WIN32 ABSOLUTE TOPMOST ENFORCEMENT ====================
+        if sys.platform == "win32":
+            import ctypes
+            def _enforce_win32_topmost():
+                try:
+                    hwnd = self.root.winfo_id()
+                    # HWND_TOPMOST = -1, SWP_NOSIZE = 0x0001, SWP_NOMOVE = 0x0002, SWP_NOACTIVATE = 0x0010
+                    # Calling SetWindowPos periodically prevents DirectX exclusive/borderless windows from burying HUD
+                    ctypes.windll.user32.SetWindowPos(hwnd, -1, 0, 0, 0, 0, 0x0013)
+                except Exception:
+                    pass
+                if self.root:
+                    self.root.after(1200, _enforce_win32_topmost)
+
+            self.root.after(300, _enforce_win32_topmost)
 
         # Periodic queue checker
         self.root.after(100, self._process_queue)
@@ -167,7 +213,7 @@ class RaphaelDesktopOverlay:
             text="[Subtitle] <Notice. Soul corridor is stable. Actively monitoring field telemetry, Master.>",
             fg="#ffd166"
         )
-        self.lbl_telem.config(text="STATUS: OPTIMAL | LINK: 100% SYNCHRONIZED")
+        self.lbl_telem.config(text="STATUS: OPTIMAL | LINK: 100% SYNCHRONIZED [DRAG TO MOVE]")
 
     def _apply_payload(self, payload: Dict[str, Any]) -> None:
         """Updates text and styles on Tkinter widgets."""
@@ -201,8 +247,18 @@ class RaphaelDesktopOverlay:
             self.lbl_speech_jp.config(text=reaction_jp or summary)
             self.lbl_speech_en.config(text=f"[Subtitle] {reaction_en}" if reaction_en else "")
 
-            # Details
-            if "lap_time_str" in details:
+            # Telemetry Strip Formatting
+            if event_type in ("OVERTAKE", "MULTI_OVERTAKE"):
+                old_p = details.get("old_position", "?")
+                new_p = details.get("new_position", "?")
+                count = details.get("count", 1)
+                self.lbl_telem.config(text=f"MANEUVER: OVERTAKE | ADVANCED: P{old_p} -> P{new_p} (+{count} CARS)")
+            elif event_type == "POSITION_LOST":
+                old_p = details.get("old_position", "?")
+                new_p = details.get("new_position", "?")
+                count = details.get("count", 1)
+                self.lbl_telem.config(text=f"WARNING: POSITION LOST | DROPPED: P{old_p} -> P{new_p} (-{count} CARS)")
+            elif "lap_time_str" in details:
                 delta = details.get("delta_prev_lap", 0.0)
                 pos = details.get("position", 1)
                 delta_str = f"{delta:+.3f}s"

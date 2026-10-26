@@ -60,6 +60,7 @@ class ACCAdapter(BaseGameAdapter):
         self._h_map: Optional[int] = None
         self._p_buf: Optional[int] = None
         self._last_completed_laps: int = 0
+        self._last_position: int = -1
         self._previous_lap_time_ms: Optional[int] = None
         self._best_lap_time_ms: Optional[int] = None
         self._connected: bool = False
@@ -148,19 +149,16 @@ class ACCAdapter(BaseGameAdapter):
             self._close_handles()
             return None
 
-    def process_telemetry_state(self, telemetry: Dict[str, Any]) -> Optional[GameEvent]:
-        """Analyzes state changes and returns GameEvent if a milestone occurred."""
+    def detect_events(self, telemetry: Dict[str, Any]) -> list:
+        """Analyzes state changes and returns all GameEvents that occurred in this tick."""
+        events = []
         status = telemetry.get("status", 0)
         completed_laps = telemetry.get("completed_laps", 0)
         last_time_ms = telemetry.get("last_time_ms", 0)
         best_time_ms = telemetry.get("best_time_ms", 0)
-        position = telemetry.get("position", 1)
+        position = telemetry.get("position", 0)
 
-        # Status 2 = LIVE session
-        if status != 2 and status != 0:
-            pass
-
-        # Lap completion detection
+        # 1. Lap Completion Detection
         if completed_laps > self._last_completed_laps and last_time_ms > 0:
             lap_number = completed_laps
             lap_time_str = format_ms_to_laptime(last_time_ms)
@@ -171,13 +169,11 @@ class ACCAdapter(BaseGameAdapter):
                 delta_prev = (last_time_ms - self._previous_lap_time_ms) / 1000.0
                 is_improvement = delta_prev < 0
 
-            # Personal best check
             is_personal_best = False
             if self._best_lap_time_ms is None or last_time_ms <= self._best_lap_time_ms:
                 is_personal_best = True
                 self._best_lap_time_ms = last_time_ms
 
-            # Update cache
             self._previous_lap_time_ms = last_time_ms
             self._last_completed_laps = completed_laps
 
@@ -191,7 +187,7 @@ class ACCAdapter(BaseGameAdapter):
                 severity = "INFO"
                 summary = f"Lap {lap_number} completed: {lap_time_str} (Delta: {delta_prev:+.3f}s, P{position})"
 
-            return GameEvent(
+            events.append(GameEvent(
                 game_name=self.game_name,
                 event_type="LAP_COMPLETED",
                 severity=severity,
@@ -205,17 +201,73 @@ class ACCAdapter(BaseGameAdapter):
                     "position": position,
                     "is_valid": True,
                 }
-            )
+            ))
+        else:
+            self._last_completed_laps = completed_laps
 
-        self._last_completed_laps = completed_laps
-        return None
+        # 2. Position Tracking: Overtake & Position Lost Detection
+        if self._last_position == -1:
+            if position > 0:
+                self._last_position = position
+        elif position > 0 and position != self._last_position:
+            old_pos = self._last_position
+            self._last_position = position
+
+            if position < old_pos:
+                diff = old_pos - position
+                if diff == 1:
+                    events.append(GameEvent(
+                        game_name=self.game_name,
+                        event_type="OVERTAKE",
+                        severity="INFO",
+                        summary=f"Overtake successful: advanced from P{old_pos} to P{position}",
+                        details={
+                            "old_position": old_pos,
+                            "new_position": position,
+                            "count": 1,
+                            "is_multi": False,
+                        }
+                    ))
+                else:
+                    events.append(GameEvent(
+                        game_name=self.game_name,
+                        event_type="MULTI_OVERTAKE",
+                        severity="CELEBRATION",
+                        summary=f"Multi-overtake! Passed {diff} cars, advanced from P{old_pos} to P{position}",
+                        details={
+                            "old_position": old_pos,
+                            "new_position": position,
+                            "count": diff,
+                            "is_multi": True,
+                        }
+                    ))
+            elif position > old_pos:
+                diff = position - old_pos
+                events.append(GameEvent(
+                    game_name=self.game_name,
+                    event_type="POSITION_LOST",
+                    severity="WARNING",
+                    summary=f"Position lost: dropped from P{old_pos} to P{position}",
+                    details={
+                        "old_position": old_pos,
+                        "new_position": position,
+                        "count": diff,
+                    }
+                ))
+
+        return events
+
+    def process_telemetry_state(self, telemetry: Dict[str, Any]) -> Optional[GameEvent]:
+        """Backwards-compatible helper returning the primary event from the state."""
+        events = self.detect_events(telemetry)
+        return events[0] if events else None
 
     async def poll_cycle(self) -> None:
         """Single polling cycle executed periodically."""
         telemetry = self._read_telemetry()
         if telemetry:
-            event = self.process_telemetry_state(telemetry)
-            if event:
+            events = self.detect_events(telemetry)
+            for event in events:
                 await self.event_bus.publish(event)
         await asyncio.sleep(self.poll_interval)
 
