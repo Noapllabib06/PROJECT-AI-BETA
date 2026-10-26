@@ -28,13 +28,18 @@ logger = get_logger("GameCopilotRunner")
 
 
 async def main_async(enable_acc: bool = True, enable_mc: bool = True, enable_voice: bool = True, enable_overlay: bool = True):
+    acc_status = "ACTIVE (Listening to Local\\acpmf_graphics)" if enable_acc else "DISABLED"
+    mc_status = "ACTIVE (Streaming .minecraft/logs/latest.log)" if enable_mc else "DISABLED"
+    overlay_status = "ENABLED (Top-Left)" if enable_overlay else "DISABLED"
+    voice_status = "ENABLED (Tensura Japanese Neural Voice)" if enable_voice else "DISABLED"
+
     print("=" * 68)
     print("   « 智恵之王 » RAPHAEL AI GAMING COPILOT - LIVE ACTIVE SYSTEM")
     print("=" * 68)
-    print(f"[*] Visual Overlay : {'ENABLED (Top-Left)' if enable_overlay else 'DISABLED'}")
-    print(f"[*] Voice Engine   : {'ENABLED (Tensura Japanese Neural Voice)' if enable_voice else 'DISABLED'}")
-    print(f"[*] ACC Telemetry  : {'ACTIVE (Listening to Local\\acpmf_graphics)' if enable_acc else 'DISABLED'}")
-    print(f"[*] Minecraft Log  : {'ACTIVE (Streaming .minecraft/logs/latest.log)' if enable_mc else 'DISABLED'}")
+    print(f"[*] Visual Overlay : {overlay_status}")
+    print(f"[*] Voice Engine   : {voice_status}")
+    print(f"[*] ACC Telemetry  : {acc_status}")
+    print(f"[*] Minecraft Log  : {mc_status}")
     print("=" * 68)
     print("[*] Status: STANDBY. Buka game Anda (ACC / Minecraft) dan mulai bermain.")
     print("[*] Raphael akan mendeteksi dan merespon secara otomatis.")
