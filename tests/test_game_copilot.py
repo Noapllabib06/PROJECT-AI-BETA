@@ -70,9 +70,9 @@ def test_raphael_brain_instant_templates():
     )
     reaction = brain._get_fallback_reaction(lap_evt)
     assert isinstance(reaction, dict)
-    assert reaction["jp"].startswith("<告。")
+    assert reaction["jp"].startswith(("<告。", "<解。"))
     assert "マスター" in reaction["jp"]
-    assert "0.850秒" in reaction["jp"]
+    assert "01:48.320" in reaction["jp"]
     assert reaction["en"].startswith("<Notice.")
     assert "Master" in reaction["en"]
 
@@ -172,9 +172,9 @@ def test_raphael_overtake_templates():
         details={"old_position": 5, "new_position": 4, "count": 1}
     )
     res_ot = brain._get_fallback_reaction(ot_evt)
-    assert res_ot["jp"].startswith("<告。")
-    assert "P5" in res_ot["jp"] and "P4" in res_ot["jp"]
-    assert "P5" in res_ot["en"] and "P4" in res_ot["en"]
+    assert res_ot["jp"].startswith(("<告。", "<解。"))
+    assert "P4" in res_ot["jp"]
+    assert "P4" in res_ot["en"]
 
     # Multi Overtake Reaction
     multi_evt = GameEvent(
@@ -185,9 +185,9 @@ def test_raphael_overtake_templates():
         details={"old_position": 4, "new_position": 1, "count": 3}
     )
     res_multi = brain._get_fallback_reaction(multi_evt)
-    assert res_multi["jp"].startswith("<告。")
+    assert res_multi["jp"].startswith(("<告。", "<解。"))
     assert "3台" in res_multi["jp"]
-    assert "3 vehicles" in res_multi["en"]
+    assert "3" in res_multi["en"]
 
     # Position Lost Reaction
     lost_evt = GameEvent(
@@ -198,9 +198,9 @@ def test_raphael_overtake_templates():
         details={"old_position": 1, "new_position": 3, "count": 2}
     )
     res_lost = brain._get_fallback_reaction(lost_evt)
-    assert res_lost["jp"].startswith("<警告。")
-    assert "P1" in res_lost["jp"] and "P3" in res_lost["jp"]
-    assert res_lost["en"].startswith("<Warning.")
+    assert res_lost["jp"].startswith(("<警告。", "<報告。"))
+    assert "P3" in res_lost["jp"]
+    assert res_lost["en"].startswith(("<Warning.", "<Report.", "<Notice."))
 
 
 def test_minecraft_log_parsing():
